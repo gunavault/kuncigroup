@@ -1,0 +1,1 @@
+﻿import fs from 'node:fs';const p='src/lib/operations/registry.ts';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace("f('attachmentId','ID bukti unggahan',true as never)","f('attachmentId','ID bukti unggahan','text',true)"));

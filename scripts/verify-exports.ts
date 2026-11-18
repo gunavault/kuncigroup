@@ -1,0 +1,2 @@
+import 'dotenv/config';import assert from 'node:assert/strict';import ExcelJS from 'exceljs';import { PDFDocument } from 'pdf-lib';import {readFileSync} from 'node:fs';
+const wb=new ExcelJS.Workbook();await wb.xlsx.readFile('artifacts/kunci-laporan.xlsx');assert.equal(wb.worksheets.length,3);assert.equal(wb.getWorksheet('Laporan')!.getCell('B4').value,1550);const pdf=await PDFDocument.load(readFileSync('artifacts/kunci-laporan.pdf'));assert.ok(pdf.getPageCount()>=1);console.log('XLSX: 3 worksheets, expected expense 1550. PDF: valid document.');

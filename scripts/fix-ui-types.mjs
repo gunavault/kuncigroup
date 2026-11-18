@@ -1,0 +1,1 @@
+﻿import fs from 'node:fs';const p='src/components/operation-workspace.tsx';let s=fs.readFileSync(p,'utf8').replace('m.data.certificateExpiry&&<','Boolean(m.data.certificateExpiry)&&<').replace('detail.data.attachmentId&&<','Boolean(detail.data.attachmentId)&&<');fs.writeFileSync(p,s);

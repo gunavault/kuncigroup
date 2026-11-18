@@ -1,0 +1,394 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum Category {
+  ASET
+  KEWAJIBAN
+  EKUITAS
+  PENDAPATAN
+  BEBAN
+}
+enum Side {
+  DEBIT
+  KREDIT
+}
+enum PeriodStatus {
+  OPEN
+  CLOSED
+}
+enum EntryStatus {
+  DRAFT
+  POSTED
+}
+enum EntryType {
+  OPENING
+  GENERAL
+  ADJUSTING
+  CLOSING
+  REVERSING
+}
+enum CashActivity {
+  OPERATING
+  INVESTING
+  FINANCING
+}
+model FiscalPeriod {
+  companyId String @default("DEMO") @map("company_id")
+  id String @id @default(cuid())
+  name String
+  startDate DateTime @db.Date @map("start_date")
+  endDate DateTime @db.Date @map("end_date")
+  status PeriodStatus @default(OPEN)
+  sequence Int @default(0)
+  entries JournalEntry[]
+  @@unique([companyId, startDate, endDate])
+  @@map("fiscal_periods")
+}
+model Account {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  category Category
+  normalBalance Side @map("normal_balance")
+  isSystemAccount Boolean @default(false) @map("is_system_account")
+  role String? @unique
+  isContra Boolean @default(false) @map("is_contra")
+  isCash Boolean @default(false) @map("is_cash")
+  active Boolean @default(true)
+  lines JournalLine[]
+  @@map("chart_of_accounts")
+}
+model JournalEntry {
+  companyId String @default("DEMO") @map("company_id")
+  branchId String? @map("branch_id")
+  actorId String? @map("actor_id")
+  id String @id @default(cuid())
+  journalNumber String @unique @map("journal_number")
+  transactionDate DateTime @db.Date @map("transaction_date")
+  type EntryType
+  description String
+  attachmentId String? @map("attachment_id")
+  attachment Attachment? @relation(fields:[attachmentId], references:[id])
+  fiscalPeriodId String @map("fiscal_period_id")
+  period FiscalPeriod @relation(fields:[fiscalPeriodId], references:[id])
+  status EntryStatus @default(DRAFT)
+  cashActivity CashActivity? @map("cash_activity")
+  reversalOfId String? @unique @map("reversal_of_id")
+  reversalOf JournalEntry? @relation("Reversal",fields:[reversalOfId], references:[id])
+  reversal JournalEntry? @relation("Reversal")
+  createdAt DateTime @default(now()) @map("created_at")
+  lines JournalLine[]
+  @@index([fiscalPeriodId, transactionDate])
+  @@map("journal_entries")
+}
+model JournalLine {
+  id String @id @default(cuid())
+  journalEntryId String @map("journal_entry_id")
+  entry JournalEntry @relation(fields:[journalEntryId], references:[id], onDelete:Cascade)
+  accountId String @map("account_id")
+  account Account @relation(fields:[accountId],references:[id])
+  description String @default("")
+  debit Decimal @db.Decimal(15,2)
+  credit Decimal @db.Decimal(15,2)
+  @@index([accountId, journalEntryId])
+  @@map("journal_lines")
+}
+model Attachment {
+  companyId String @default("DEMO") @map("company_id")
+  ownerId String? @map("owner_id")
+  id String @id @default(cuid())
+  name String
+  mime String
+  path String @unique
+  createdAt DateTime @default(now())
+  entries JournalEntry[]
+  @@map("attachments")
+}
+model AuditEvent {
+  companyId String? @map("company_id")
+  actorId String? @map("actor_id")
+  id String @id @default(cuid())
+  action String
+  entityId String
+  details Json
+  createdAt DateTime @default(now())
+  @@map("audit_events")
+}
+enum Role {
+  DIRECTOR
+  EMPLOYEE
+  ADMIN
+  MANAGER
+  FINANCE
+  HR
+  SUPERVISOR
+  STAFF
+  AUDITOR
+}
+enum WorkflowStatus {
+  IMPORTED
+  DRAFT
+  SUBMITTED
+  APPROVED
+  POSTED
+  REJECTED
+  CANCELLED
+}
+model Company {
+  id String @id
+  name String
+  code String @unique
+  active Boolean @default(true)
+  isDemo Boolean @default(false)
+  settings Json @default("{}")
+  sequence Int @default(0)
+  createdAt DateTime @default(now())
+  @@map("companies")
+}
+model Branch {
+  id String @id @default(cuid())
+  companyId String
+  code String
+  name String
+  address String @default("")
+  latitude Decimal? @db.Decimal(10,7)
+  longitude Decimal? @db.Decimal(10,7)
+  radius Int @default(200)
+  active Boolean @default(true)
+  @@unique([companyId,code])
+  @@index([companyId])
+  @@map("branches")
+}
+model User {
+  id String @id @default(cuid())
+  username String? @unique
+  email String? @unique
+  name String
+  passwordHash String
+  active Boolean @default(true)
+  mustChangePassword Boolean @default(true)
+  isSuperuser Boolean @default(false)
+  grants AccessGrant[]
+  sessions UserSession[]
+  createdAt DateTime @default(now())
+  @@map("erp_users")
+}
+model AccessGrant {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  companyId String
+  role Role
+  branchIds String[] @default([])
+  active Boolean @default(true)
+  managerId String?
+  employeeId String?
+  @@unique([companyId,employeeId])
+  @@index([companyId,managerId])
+  @@unique([userId,companyId])
+  @@map("access_grants")
+}
+model UserSession {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  userId String
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+model MasterRecord {
+  id String @id @default(cuid())
+  companyId String
+  branchId String?
+  kind String
+  code String
+  name String
+  active Boolean @default(true)
+  data Json @default("{}")
+  sourceKey String? @unique
+  sourceFileId String?
+  sourceRow String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([companyId,kind,code])
+  @@index([companyId,kind,branchId])
+  @@map("master_records")
+}
+model BusinessRecord {
+  id String @id @default(cuid())
+  companyId String
+  branchId String?
+  module String
+  number String @unique
+  title String
+  date DateTime @db.Date
+  status WorkflowStatus @default(DRAFT)
+  version Int @default(1)
+  data Json @default("{}")
+  amount Decimal @default(0) @db.Decimal(15,2)
+  settled Decimal @default(0) @db.Decimal(15,2)
+  actorId String
+  approvedBy String?
+  journalId String? @unique
+  sourceKey String? @unique
+  sourceFileId String?
+  sourceRow String?
+  lines BusinessLine[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([companyId,module,status,date])
+  @@index([companyId,branchId])
+  @@map("business_records")
+}
+model BusinessLine {
+  id String @id @default(cuid())
+  recordId String
+  record BusinessRecord @relation(fields:[recordId],references:[id],onDelete:Cascade)
+  productId String?
+  description String
+  quantity Decimal @db.Decimal(18,3)
+  unitPrice Decimal @db.Decimal(15,2)
+  total Decimal @db.Decimal(15,2)
+  data Json @default("{}")
+  @@index([recordId])
+  @@map("business_lines")
+}
+model StockLot {
+  id String @id @default(cuid())
+  companyId String
+  branchId String
+  warehouseId String
+  productId String
+  lotCode String
+  expiresAt DateTime? @db.Date
+  quantity Decimal @default(0) @db.Decimal(18,3)
+  value Decimal @default(0) @db.Decimal(15,2)
+  unitCost Decimal @db.Decimal(15,2)
+  quarantined Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@unique([companyId,warehouseId,productId,lotCode])
+  @@index([companyId,productId,warehouseId,expiresAt])
+  @@map("stock_lots")
+}
+model StockMovement {
+  effectiveDate DateTime @db.Date @default(now())
+  id String @id @default(cuid())
+  companyId String
+  recordId String
+  lotId String
+  warehouseId String
+  productId String
+  quantity Decimal @db.Decimal(18,3)
+  value Decimal @db.Decimal(15,2)
+  createdAt DateTime @default(now())
+  @@index([companyId,recordId])
+  @@map("stock_movements")
+}
+model Discussion {
+  id String @id @default(cuid())
+  companyId String
+  branchId String?
+  channel String @default("umum")
+  authorId String
+  authorName String
+  body String
+  system Boolean @default(false)
+  referenceId String?
+  createdAt DateTime @default(now())
+  @@index([companyId,branchId,createdAt])
+  @@map("discussions")
+}
+model SourceFile {
+  id String @id
+  companyId String @default("KBA")
+  name String
+  mime String
+  parentId String?
+  path String
+  url String
+  modifiedAt DateTime?
+  sha256 String?
+  status String @default("INDEXED")
+  rowCount Int @default(0)
+  notes String @default("")
+  @@index([companyId,status])
+  @@map("source_files")
+}
+model ImportRow {
+  id String @id @default(cuid())
+  companyId String
+  sourceFileId String
+  sheet String
+  row Int
+  kind String
+  fingerprint String @unique
+  status String @default("REVIEW")
+  data Json
+  issue String
+  targetId String?
+  createdAt DateTime @default(now())
+  @@index([companyId,kind,status])
+  @@map("import_rows")
+}
+model ModuleSetting {
+  id String @id @default(cuid())
+  companyId String
+  key String
+  enabled Boolean @default(true)
+  settings Json @default("{}")
+  @@unique([companyId,key])
+  @@map("module_settings")
+}
+
+model DataImportBatch {
+  id String @id
+  companyId String
+  name String
+  status String @default("PREPARED")
+  asOfDate DateTime? @db.Date
+  stats Json @default("{}")
+  issues Json @default("[]")
+  createdAt DateTime @default(now())
+  completedAt DateTime?
+  @@index([companyId,createdAt])
+  @@map("data_import_batches")
+}
+model SourceFact {
+  id String @id
+  companyId String
+  branchId String?
+  batchId String
+  kind String
+  sourceKey String @unique
+  sourceFileId String
+  sheet String
+  row Int
+  column Int?
+  effectiveDate DateTime? @db.Date
+  projectId String?
+  employeeId String?
+  productId String?
+  assetId String?
+  accountId String?
+  documentNumber String?
+  quantity Decimal? @db.Decimal(18,3)
+  debit Decimal? @db.Decimal(18,2)
+  credit Decimal? @db.Decimal(18,2)
+  amount Decimal? @db.Decimal(18,2)
+  status String @default("VALIDATED")
+  data Json @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([companyId,kind,effectiveDate])
+  @@index([companyId,employeeId,effectiveDate])
+  @@index([companyId,branchId,kind])
+  @@index([batchId,kind,status])
+  @@index([companyId,documentNumber])
+  @@map("source_facts")
+}

@@ -1,0 +1,26 @@
+# Dependencies and build output
+node_modules/
+.next/
+.npm-cache/
+*.tsbuildinfo
+next-env.d.ts
+test-results/
+playwright-report/
+
+# Secrets and private data: never commit (the GitHub repo is public)
+.env
+.env.*
+!.env.example
+data/
+uploads/
+artifacts/
+tmp/
+*.tar.gz
+*.dump
+*.xlsx
+*.pem
+*.key
+
+# Local agent/editor settings
+.claude/settings.local.json
+.vscode/

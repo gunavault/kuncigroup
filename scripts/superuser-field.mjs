@@ -1,0 +1,1 @@
+﻿import fs from 'node:fs';const p='prisma/schema.prisma';let s=fs.readFileSync(p,'utf8').replace('  mustChangePassword Boolean @default(true)','  mustChangePassword Boolean @default(true)\n  isSuperuser Boolean @default(false)');fs.writeFileSync(p,s);

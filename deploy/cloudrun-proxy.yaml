@@ -1,0 +1,86 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: kunci-erp
+  labels:
+    cloud.googleapis.com/location: us-central1
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/maxScale: '1'
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '1'
+        run.googleapis.com/cpu-throttling: 'true'
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/network-interfaces: '[{"network":"default","subnetwork":"kunci-proxy"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+    spec:
+      serviceAccountName: kunci-proxy@kunci-group-erp-20261116.iam.gserviceaccount.com
+      containerConcurrency: 40
+      timeoutSeconds: 120
+      containers:
+        - image: docker.io/library/nginx:stable-alpine
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          command: ['/bin/sh', '-c']
+          args:
+            - 'printf "%s" "$PROXY_CONFIG" > /tmp/nginx.conf; exec nginx -c /tmp/nginx.conf -g "daemon off;"'
+          env:
+            - name: PROXY_CONFIG
+              value: |
+                worker_processes 1;
+                pid /tmp/nginx.pid;
+                events { worker_connections 256; }
+                http {
+                  server_tokens off;
+                  client_max_body_size 8m;
+                  client_body_temp_path /tmp/client-body;
+                  proxy_temp_path /tmp/proxy;
+                  log_format minimal '$request_method $uri $status $request_time';
+                  access_log /dev/stdout minimal;
+                  error_log /dev/stderr warn;
+                  set_real_ip_from 0.0.0.0/0;
+                  real_ip_header X-Forwarded-For;
+                  real_ip_recursive off;
+                  server {
+                    listen 8080;
+                    add_header Strict-Transport-Security "max-age=31536000" always;
+                    add_header X-Content-Type-Options nosniff always;
+                    add_header X-Frame-Options DENY always;
+                    add_header Referrer-Policy same-origin always;
+                    add_header Permissions-Policy "camera=(self), geolocation=(self), microphone=()" always;
+                    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'" always;
+                    location / {
+                      proxy_pass http://10.128.0.2:8081;
+                      proxy_http_version 1.1;
+                      proxy_set_header Host $http_host;
+                      proxy_set_header X-Forwarded-Host $http_host;
+                      proxy_set_header X-Forwarded-Proto https;
+                      proxy_set_header X-Forwarded-For $remote_addr;
+                      proxy_set_header Connection "";
+                      proxy_buffering off;
+                      proxy_read_timeout 120s;
+                    }
+                    location = /__proxy-ready {
+                      proxy_pass http://10.128.0.2:8081/;
+                      proxy_set_header Host localhost;
+                      proxy_set_header X-Forwarded-Proto https;
+                      proxy_connect_timeout 2s;
+                      proxy_read_timeout 2s;
+                    }
+                  }
+                }
+          startupProbe:
+            httpGet:
+              path: /__proxy-ready
+              port: 8080
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 48

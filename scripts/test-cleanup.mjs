@@ -1,0 +1,1 @@
+﻿import fs from 'node:fs';const p='tests/operations.test.ts';let s=fs.readFileSync(p,'utf8').replace("const {companyRole,authorizeCompany,passwordMatches,type:unused}= {} as any;",'');fs.writeFileSync(p,s);

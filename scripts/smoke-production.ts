@@ -1,0 +1,15 @@
+import 'dotenv/config';
+import assert from 'node:assert/strict';
+import ExcelJS from 'exceljs';
+import { PDFDocument } from 'pdf-lib';
+const base=process.env.SMOKE_URL??'http://127.0.0.1:8080';
+const guest=await fetch(`${base}/api/erp`);assert.equal(guest.status,401,'unauthenticated API');
+const wrong=await fetch(`${base}/api/session`,{method:'POST',headers:{'Content-Type':'application/json',origin:base},body:JSON.stringify({password:'invalid'})});assert.equal(wrong.status,401,'wrong password');
+const login=await fetch(`${base}/api/session`,{method:'POST',headers:{'Content-Type':'application/json',origin:base},body:JSON.stringify({password:process.env.APP_PASSWORD})});
+assert.equal(login.status,200,`login (${await login.text()})`);const cookies=login.headers.getSetCookie();assert.ok(cookies[0].includes('HttpOnly'));assert.ok(cookies[0].includes('Secure'));const cookie=cookies[0].split(';')[0];const headers={cookie};
+const response=await fetch(`${base}/api/erp`,{headers});assert.equal(response.status,200);const snapshot=await response.json();assert.equal(snapshot.report.profit,'950.00');assert.equal(snapshot.report.assets,'3950.00');assert.equal(snapshot.report.balanceDifference,'0.00');
+const malicious=await fetch(`${base}/api/erp`,{method:'POST',headers:{cookie,origin:'https://untrusted.invalid','Content-Type':'application/json'},body:JSON.stringify({action:'preview',periodId:snapshot.period.id})});assert.equal(malicious.status,400,'cross-origin requests');
+const xlsx=await fetch(`${base}/api/export?format=xlsx&period=${snapshot.period.id}`,{headers});assert.equal(xlsx.status,200);const wb=new ExcelJS.Workbook();await wb.xlsx.load(await xlsx.arrayBuffer());assert.equal(wb.worksheets.length,3);
+const pdf=await fetch(`${base}/api/export?format=pdf&period=${snapshot.period.id}`,{headers});assert.equal(pdf.status,200);assert.ok((await PDFDocument.load(await pdf.arrayBuffer())).getPageCount()>0);
+const preview=await fetch(`${base}/api/erp`,{method:'POST',headers:{cookie,origin:base,'Content-Type':'application/json'},body:JSON.stringify({action:'preview',periodId:snapshot.period.id})});assert.equal(preview.status,200);assert.equal((await preview.json()).result.groups.length,3);
+console.log('Production smoke PASS: auth, origin protection, seed report, XLSX, PDF, closing preview.');

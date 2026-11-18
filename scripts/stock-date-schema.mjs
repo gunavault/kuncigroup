@@ -1,0 +1,1 @@
+﻿import fs from 'node:fs';let p='prisma/schema.prisma',s=fs.readFileSync(p,'utf8');fs.writeFileSync('data/pre-guard-schema.prisma',s);s=s.replace('model StockMovement {','model StockMovement {\n  effectiveDate DateTime @db.Date @default(now())');fs.writeFileSync(p,s);
