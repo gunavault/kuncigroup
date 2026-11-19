@@ -1,24 +1,19 @@
-# Rencana ERP v4 ? 19 November 2026
+# Rencana ERP v4 — 19 November 2026
 
-## Tujuan aktif
+## Tujuan
 
-Periksa kembali seluruh nominal dan hubungan transaksi/master terhadap enam workbook dan makalah/panduan yang disediakan. Tambahkan 4?6 kartu pada setiap modul. Serahkan daftar kekosongan data dalam Excel dan PowerPoint. Lakukan QA UI dan fungsi. Semua perubahan melalui branch dan PR di gunavault/kuncigroup dengan reviewer gunavault.
+Periksa nominal dan hubungan transaksi/master terhadap enam workbook serta makalah/panduan. Tambahkan 4–6 kartu setiap modul. Serahkan rekap kekosongan dalam Excel dan PowerPoint. Uji UI/fungsi. Perubahan melalui branch dan PR gunavault/kuncigroup dengan reviewer gunavault.
 
-## Urutan
+## Pelaksanaan
 
-1. Ambil baseline GitHub, baca AGENTS dan dokumentasi Next/Context7. Selesai: main 132f070, branch codex/erp-v4-module-kpis-data-audit, Context7 telah dipakai.
-2. Ambil snapshot produksi privat tanpa password/token. Cocokkan hash sumber dan makalah, periksa nominal secara independen, identitas, stok, relasi, dan input kosong.
-3. Terapkan 4?6 KPI server per modul dengan scope perusahaan/cabang/pengguna, jumlah penuh dan uang Decimal/sen. Uji katalog bersama pada filter cabang.
-4. Susun workbook rincian kekosongan, rekonsiliasi dan pemilik tindak lanjut; susun presentasi ringkas dengan bukti yang sama. Jangan mengisi nilai kosong secara spekulatif.
-5. Jalankan typecheck, integration test, build, uji browser desktop/ponsel, serta pembatasan akses dan filter. Koreksi temuan nyata.
-6. Dokumentasikan setup agen, Context7 dan workflow pull/PR. Scan rahasia/data pribadi, fetch ulang, commit, push branch, buat PR dan minta review gunavault.
-7. Terapkan pembaruan yang sudah diotorisasi pada VM yang sama dengan backup, uji publik dan restore; serahkan hasil dan batas data yang belum disahkan HR/Finance.
+1. Selesai: main 132f070 diperiksa, AGENTS/dokumentasi Next dibaca, Context7 digunakan. Branch `codex/erp-v4-module-kpis-data-audit`.
+2. Selesai: audit produksi, hash sumber, pembacaan XML independen dan pemeriksaan 11 berkas. Snapshot mentah tetap di server. Hanya temuan/agregat diambil untuk laporan.
+3. Selesai: 4–6 kartu pada 19 modul, cakupan perusahaan/cabang/pengguna, hitungan penuh dan uang dalam sen. Katalog bersama mengikuti filter cabang.
+4. Selesai: Excel tujuh sheet dan presentasi 12 slide, lokasi sumber, nominal pembanding, pemilik tindakan dan isian tindak lanjut. Seluruh sheet/slide diperiksa.
+5. Baseline lulus TypeScript, 67 pengujian, build dan UI desktop/ponsel. Branch `feat/odoo-handover-parity` yang sudah ada di VM digabungkan untuk mempertahankan approval. Rilis gabungan lulus 72 pengujian dan build; UI gabungan diperiksa ulang.
+6. Selesai: panduan agen/Context7 dan repository diperbarui, source dipindai, commit dan push. PR #1 mempunyai reviewer/assignee gunavault, tetap terbuka untuk review.
+7. Berjalan: penerapan gabungan pada VM existing, backup/migrasi aman, smoke API/browser HTTPS publik dan restore. Penerapan pertama ditahan pengujian karena source VM lebih baru dari main; aplikasi sebelumnya dipulihkan tanpa reset database.
 
-## Pengamanan sumber
+## Aturan sumber
 
-Data dan keluaran laporan tetap privat di data/ dan outputs/. Tidak memasukkan workbook, karyawan, dump, password atau laporan nyata ke repository publik. DEMO dipisahkan dari angka bisnis. Sumber/laporan estimasi tetap berbeda dari ledger posted.
-
-
-## Status pelaksanaan
-
-Langkah 1?3 selesai. TypeScript, 67 pengujian integrasi dan build lulus. Uji desktop/ponsel 19 modul serta 7 kelompok regresi UI lulus. Langkah 4 memfinalisasi Excel/PPT privat dan pemeriksaan visual. Langkah 5?7: pemeriksaan akhir, PR/reviewer, lalu penerapan dan verifikasi publik. Snapshot mentah tetap di server; hanya hasil temuan/agregat yang diambil untuk laporan.
+Data/laporan tetap privat di data/ dan outputs/. Workbook, karyawan, dump, password dan laporan nyata tidak masuk Git publik. DEMO dipisahkan. Estimasi dan sumber historis berbeda dari ledger POSTED. Nilai kosong atau selisih tidak dikoreksi tanpa bukti dan persetujuan pemilik proses.

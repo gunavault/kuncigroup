@@ -23,7 +23,7 @@ Workbook asli memuat sembilan error cache pada kolom absensi yang dikecualikan d
 
 ## Pengujian
 
-TypeScript, build Next.js produksi dan 67 pengujian integrasi lulus pada baseline v4 lokal. Lima pengujian baru meliputi seluruh modul, agregasi lebih dari satu halaman, cakupan perusahaan/cabang/pemilik, pencarian, migrasi katalog yang aman diulang, ketelitian sen, order tanpa jurnal dan pengaruh jurnal penutup.
+TypeScript, build Next.js produksi dan 72 pengujian lulus pada rilis gabungan lokal. Lima pengujian dashboard baru meliputi seluruh modul, agregasi lebih dari satu halaman, cakupan perusahaan/cabang/pemilik, pencarian, migrasi katalog yang aman diulang, ketelitian sen, order tanpa jurnal dan pengaruh jurnal penutup. Perubahan approval pada branch `feat/odoo-handover-parity` dipertahankan: verifikasi OPS, batas persetujuan, kuota proyek, pemisahan pelaksana dan Management Fee PDF. Pengujiannya masuk rangkaian yang sama.
 
 Playwright memakai profil Edge terisolasi. Pemeriksaan desktop 1440×1000 dan ponsel 390×844 mencakup seluruh 19 modul, jumlah kartu, pemuatan API, cache, pencarian dan batas viewport. Tujuh kelompok regresi v3 memeriksa filter sumber/absensi/stok, pagination, detail master, formulir transaksi dan pengelolaan akun/peran/atasan/cabang/profil/reset/deaktivasi. Tidak ada error JavaScript selama skenario tersebut.
 
