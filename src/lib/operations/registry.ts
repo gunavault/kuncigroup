@@ -437,6 +437,7 @@ export const masterDefinitions: Record<
       f("taxId", "NPWP / NITKU", "text", false, {
         hint: "NPWP 15 atau 16 digit, atau NITKU 22 digit. Titik/strip diabaikan.",
       }),
+      f("pkp", "Pengusaha Kena Pajak (PKP)", "checkbox"),
     ],
   },
   PURCHASE_QUOTA: {
@@ -481,6 +482,12 @@ export const masterDefinitions: Record<
       f("certification", "Nama sertifikasi"),
       f("certificateNo", "Nomor sertifikat"),
       f("certificateExpiry", "Masa berlaku sertifikat", "date"),
+      f("employmentStatus", "Status hubungan kerja", "select", false, {
+        options: ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG", "ALIH_DAYA"],
+        hint: "PP 35/2021: PKWT wajib memiliki tanggal berakhir; total jangka waktu maksimal 5 tahun.",
+      }),
+      f("contractStart", "Mulai kontrak", "date"),
+      f("contractEnd", "Akhir kontrak", "date"),
       f("userId", "ID akun pengguna"),
     ],
   },
@@ -490,6 +497,9 @@ export const masterDefinitions: Record<
       f("address", "Alamat", "textarea"),
       f("type", "Jenis lokasi", "select", true, {
         options: ["CENTRAL", "SITE", "OUTLET", "KITCHEN"],
+      }),
+      f("odooCode", "Kode lokasi Odoo", "text", false, {
+        hint: "Rujukan silang ke kode gudang Odoo (mis. KBAHO, KLHP) untuk rekonsiliasi migrasi.",
       }),
     ],
   },
@@ -522,6 +532,20 @@ export const masterDefinitions: Record<
       f("acquiredAt", "Tanggal perolehan", "date"),
       f("cost", "Harga perolehan", "number"),
       f("nextMaintenance", "Servis berikutnya", "date"),
+      f("assetScope", "Ruang lingkup aset", "select", false, {
+        options: ["HEAD_OFFICE", "PROJECT"],
+      }),
+      f("fiscalGroup", "Kelompok harta fiskal", "select", false, {
+        options: [
+          "KELOMPOK_1",
+          "KELOMPOK_2",
+          "KELOMPOK_3",
+          "KELOMPOK_4",
+          "BANGUNAN_PERMANEN",
+          "BANGUNAN_TIDAK_PERMANEN",
+        ],
+        hint: "Penyusutan fiskal (UU PPh Pasal 11, PMK 72/2023). Ditetapkan Finance; tidak diisi otomatis.",
+      }),
     ],
   },
   BOM: {

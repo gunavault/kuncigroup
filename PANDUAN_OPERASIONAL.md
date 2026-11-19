@@ -113,3 +113,10 @@ Alur pembelian yang disarankan: **REQUEST** (Permintaan Pembelian dari lapangan;
 **Management fee**: centang *Management fee* pada master barang/jasa. PDF dokumen memisahkan baris tersebut ke seksi Management Fee dengan subtotal masing-masing.
 
 **NPWP**: master pelanggan/pemasok hanya menerima NPWP 15/16 digit atau NITKU 22 digit (titik/strip diabaikan). Nilai seperti "not applicable" harus dikosongkan.
+
+## Master data v5: kontrak, aset dan kode lokasi Odoo
+
+- **Karyawan:** isi *Status hubungan kerja*, *Mulai kontrak* dan *Akhir kontrak*. PKWT wajib memiliki tanggal akhir dan jangka waktunya tidak boleh lebih dari 5 tahun (PP 35/2021). Dashboard Employees menampilkan kontrak dan sertifikat yang habis dalam 30 hari.
+- **Aset:** *Ruang lingkup* (Head Office/Proyek) sudah diisi dari jejak workbook sumber. *Kelompok harta fiskal* ditetapkan Finance.
+- **Gudang:** *Kode lokasi Odoo* membantu rekonsiliasi migrasi. Gudang KBAHO dibuat dengan status menunggu verifikasi. Duplikat dan lokasi GOR yang belum dipetakan tercantum di LAPORAN_DATA_V5.md.
+- **Partner:** tandai *PKP* hanya bila NPWP/NITKU tersedia.

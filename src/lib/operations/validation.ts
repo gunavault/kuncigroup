@@ -43,6 +43,22 @@ export function validateMaster(kind: string, data: unknown) {
     throw new Error(
       "NPWP harus 15 atau 16 digit, atau NITKU 22 digit. Kosongkan bila belum ada.",
     );
+  if (kind === "PARTNER" && value.pkp === true && !str(value.taxId).trim())
+    throw new Error("Partner PKP wajib memiliki NPWP/NITKU.");
+  if (kind === "EMPLOYEE") {
+    const start = str(value.contractStart),
+      end = str(value.contractEnd);
+    if (start && end && end < start)
+      throw new Error("Akhir kontrak mendahului mulai kontrak.");
+    if (value.employmentStatus === "PKWT") {
+      if (!end)
+        throw new Error("PKWT wajib memiliki tanggal akhir kontrak (PP 35/2021).");
+      if (start && Date.parse(end) - Date.parse(start) > 5 * 366 * 86400000)
+        throw new Error(
+          "Jangka waktu PKWT melebihi 5 tahun (PP 35/2021 Pasal 8). Tinjau status hubungan kerja.",
+        );
+    }
+  }
   if (kind === "PURCHASE_QUOTA") {
     if (quantity(str(value.maxQuantity)) <= 0n)
       throw new Error("Kuantitas maksimum kuota harus lebih dari nol.");

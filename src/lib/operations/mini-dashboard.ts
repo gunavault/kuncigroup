@@ -50,7 +50,14 @@ export async function moduleMiniDashboard(actor: Actor, companyId: string, modul
       masterCount("EMPLOYEE", { AND: [roster, { active: false }] }),
       masterCount("EMPLOYEE", { NOT: roster }),
     ]);
-    cards = [count("total", "Referensi karyawan", total), count("roster", "Roster terkini", current), count("active", "Roster aktif", active), count("inactive", "Roster nonaktif", inactive), count("historical", "Referensi historis", historical, "Bukan tambahan personel pada roster terkini")];
+    cards = [count("total", "Referensi karyawan", total), count("roster", "Roster terkini", current), count("active", "Roster aktif", active, `${inactive} roster nonaktif`), count("historical", "Referensi historis", historical, "Bukan tambahan personel pada roster terkini")];
+    // Employment and certificate deadlines within the next 30 days (WIB calendar dates).
+    const rows = await db.masterRecord.findMany({ where: { AND: [{ companyId, kind: "EMPLOYEE", active: true }, masterScope, ownEmployee] }, select: { data: true } });
+    const today = new Date(now.getTime() + 7 * 3600000).toISOString().slice(0, 10),
+      horizon = new Date(now.getTime() + 7 * 3600000 + 30 * 86400000).toISOString().slice(0, 10);
+    const due = (key: string) => rows.filter(r => { const v = String((r.data as Record<string, unknown>)[key] ?? ""); return /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= today && v <= horizon; }).length;
+    cards.push(count("contracts", "Kontrak habis dalam 30 hari", due("contractEnd"), "Tinjau perpanjangan/kompensasi PKWT (PP 35/2021)"),
+      count("certificates", "Sertifikat habis dalam 30 hari", due("certificateExpiry"), "Jadwalkan perpanjangan sertifikasi"));
   } else if (module === "inventory" || module === "barcode") {
     const lotWhere: Prisma.StockLotWhereInput = { companyId, ...branch,
       ...(q ? { productId: { in: (await db.masterRecord.findMany({ where: { companyId, kind: "PRODUCT", OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] }, select: { id: true } })).map(m => m.id) } } : {}) };

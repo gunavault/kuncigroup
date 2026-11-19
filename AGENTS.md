@@ -21,6 +21,7 @@ This is the entry point for any coding agent (Claude Code, Codex, Cursor, …). 
 | [LAPORAN_UJI_TUNTAS_V3.md](LAPORAN_UJI_TUNTAS_V3.md) | v3 data-quality and test report |
 | [WORK_PLAN_V4.md](WORK_PLAN_V4.md) | Current implementation and verification status |
 | [LAPORAN_UJI_TUNTAS_V4.md](LAPORAN_UJI_TUNTAS_V4.md) | Reconciliation, missing-data report and module cards |
+| [LAPORAN_DATA_V5.md](LAPORAN_DATA_V5.md) | Master-data v5: evaluation of AI-generated schema/audit docs, proven enrichment, UAT script |
 
 ## Repository workflow required by the owner
 
@@ -140,7 +141,7 @@ npm.cmd run build        # prisma generate + next build
 ## `scripts/` — read before running anything
 
 - **Maintained:**
-  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`.
+  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`, `enrich-master-v5.ts` (dry-run by default; `--apply` writes proven values only).
   - Report, verify and QA scripts: `report-import.ts`, `verify-*.ts`, `qa-*.{ts,mjs}`.
   - Smoke scripts (`smoke-*.ts`): they read the `SMOKE_URL` / `APP_PASSWORD` env vars.
 - **One-off patchers — DO NOT RUN.** These files string-replace code in `src/`, `prisma/schema.prisma` or `tests/`. They were already applied and re-running them corrupts code:
