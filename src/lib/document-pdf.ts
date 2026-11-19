@@ -16,8 +16,30 @@ export type PrintableDocument = {
     quantity: string;
     unitPrice: string;
     total: string;
+    /** Line section, e.g. "Management Fee". Lines without a group go into the regular section. */
+    group?: string;
   }[];
 };
+const REGULAR = "Biaya operasional / reimbursable";
+/** Groups lines (regular section first) and computes per-section subtotals in cents. */
+export function groupLines(lines: PrintableDocument["lines"]) {
+  const groups = new Map<string, PrintableDocument["lines"]>();
+  for (const l of lines) {
+    const key = l.group || REGULAR;
+    groups.set(key, [...(groups.get(key) ?? []), l]);
+  }
+  const ordered = [...groups.entries()].sort(([a], [b]) =>
+    a === REGULAR ? -1 : b === REGULAR ? 1 : a.localeCompare(b),
+  );
+  return ordered.map(([name, items]) => ({
+    name,
+    items,
+    subtotal: items.reduce(
+      (s, l) => s + BigInt(Math.round(Number(l.total) * 100)),
+      0n,
+    ),
+  }));
+}
 const text = (s: string) =>
   String(s)
     .normalize("NFKD")
@@ -137,7 +159,34 @@ export async function documentPdf(d: PrintableDocument) {
       y -= 32;
     };
     header();
-    for (const l of d.lines) {
+    const sections = groupLines(d.lines),
+      sectioned = sections.length > 1;
+    const rows: (
+      | { kind: "line"; line: PrintableDocument["lines"][number] }
+      | { kind: "title" | "subtotal"; name: string; subtotal: bigint }
+    )[] = [];
+    for (const g of sections) {
+      if (sectioned) rows.push({ kind: "title", name: g.name, subtotal: 0n });
+      for (const line of g.items) rows.push({ kind: "line", line });
+      if (sectioned)
+        rows.push({ kind: "subtotal", name: g.name, subtotal: g.subtotal });
+    }
+    for (const row of rows) {
+      if (row.kind !== "line") {
+        if (y - 24 < 65) {
+          next(24);
+          header();
+        }
+        if (row.kind === "title") draw(text(row.name).toUpperCase(), 48, y, 9, true, green);
+        else {
+          const value = money((Number(row.subtotal) / 100).toFixed(2));
+          draw("Subtotal " + text(row.name), 48, y, 9, true);
+          draw(value, 548 - bold.widthOfTextAtSize(value, 9), y, 9, true);
+        }
+        y -= 22;
+        continue;
+      }
+      const l = row.line;
       const description = wrap(l.description, 250, 9),
         height = Math.max(28, description.length * 13 + 12);
       if (y - height < 65) {

@@ -395,8 +395,21 @@ export default function OperationWorkspace() {
     }
   }
   async function transition(r: RecordData, action: string) {
-    const reason = action === "reject" ? prompt("Alasan penolakan") : undefined;
+    const rd = (r.data ?? {}) as Record<string, unknown>;
+    let reason: string | null | undefined =
+      action === "reject" ? prompt("Alasan penolakan") : undefined;
     if (action === "reject" && !reason) return;
+    if (
+      action === "approve" &&
+      r.module === "purchase" &&
+      rd.documentType === "ORDER" &&
+      rd.projectId &&
+      (state?.assignedRole === "ADMIN" || state?.role === "ADMIN")
+    )
+      reason =
+        prompt(
+          "Alasan override kuota proyek (kosongkan bila PO masih dalam kuota)",
+        ) || undefined;
     if (
       ["post", "cancel"].includes(action) &&
       !confirm(
@@ -416,6 +429,14 @@ export default function OperationWorkspace() {
       await load();
     } catch {}
   }
+  const opsRequired = (module: string) =>
+    Boolean(
+      (
+        (state?.company.settings?.approval as
+          | Record<string, { requireOpsVerification?: boolean }>
+          | undefined) ?? {}
+      )[module]?.requireOpsVerification,
+    );
   const masters = state?.masters ?? [];
   const def = definitions.find((m) => m.key === view);
   const employeeView = view === "employees";
@@ -1717,6 +1738,24 @@ export default function OperationWorkspace() {
                 </strong>
               </div>
             </div>
+            {(opsRequired(detail.module) ||
+              Boolean(detail.data?.approvedName) ||
+              Boolean(detail.data?.quotaOverride)) && (
+              <p className="muted">
+                {opsRequired(detail.module) &&
+                  (detail.data?.opsVerifiedName
+                    ? `Diverifikasi OPS: ${String(detail.data.opsVerifiedName)}. `
+                    : detail.status === "SUBMITTED"
+                      ? "Menunggu verifikasi OPS. "
+                      : "")}
+                {detail.data?.approvedName
+                  ? `Disetujui: ${String(detail.data.approvedName)}${detail.data.approvalTier ? ` (tingkat ${String(detail.data.approvalTier)})` : ""}. `
+                  : ""}
+                {detail.data?.quotaOverride
+                  ? "Override kuota proyek tercatat di jejak audit."
+                  : ""}
+              </p>
+            )}
             <dl className="detail-fields">
               {Object.entries(detail.data).map(([key, value]) => (
                 <div key={key}>
@@ -1800,6 +1839,19 @@ export default function OperationWorkspace() {
                 Ajukan persetujuan
               </Button>
             )}
+            {detail.status === "SUBMITTED" &&
+              opsRequired(detail.module) &&
+              !(detail.data as Record<string, unknown>)?.opsVerifiedBy &&
+              ["ADMIN", "DIRECTOR", "MANAGER", "SUPERVISOR"].includes(
+                String(state?.assignedRole ?? state?.role),
+              ) && (
+                <Button
+                  disabled={busy}
+                  onClick={() => void transition(detail, "verify")}
+                >
+                  Verifikasi OPS
+                </Button>
+              )}
             {canManage && detail.status === "SUBMITTED" && (
               <>
                 <Button
@@ -1810,7 +1862,17 @@ export default function OperationWorkspace() {
                   Tolak
                 </Button>
                 <Button
-                  disabled={busy}
+                  disabled={
+                    busy ||
+                    (opsRequired(detail.module) &&
+                      !(detail.data as Record<string, unknown>)?.opsVerifiedBy)
+                  }
+                  title={
+                    opsRequired(detail.module) &&
+                    !(detail.data as Record<string, unknown>)?.opsVerifiedBy
+                      ? "Menunggu verifikasi OPS"
+                      : undefined
+                  }
                   onClick={() => void transition(detail, "approve")}
                 >
                   Setujui

@@ -9,6 +9,7 @@ import {
 import { atomic, json, object, str } from "./shared";
 import { audit } from "./engine";
 import { modules } from "./registry";
+import { normalizeApprovalSettings } from "./approval";
 import {manageUsers} from './users';
 export async function manageSettings(actor: Actor, input: unknown) {
   const s = object(input),
@@ -209,6 +210,10 @@ export async function manageSettings(actor: Actor, input: unknown) {
       companyId,
       async (tx) => {
         if (d.settings) {
+          if (d.settings.approval !== undefined)
+            d.settings.approval = normalizeApprovalSettings(
+              d.settings.approval,
+            );
           const map = object(d.settings.accounting);
           for (const id of Object.values(map).flat())
             if (typeof id === "string")

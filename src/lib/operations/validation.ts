@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { definitions, masterDefinitions, type Field } from "./registry";
 import { object, str, quantity } from "./shared";
+import { validTaxId } from "./approval";
 export function validateFields(fields: Field[], input: unknown) {
   const data = object(input);
   for (const f of fields) {
@@ -38,6 +39,20 @@ export function validateMaster(kind: string, data: unknown) {
   if (!m) throw new Error("Jenis master tidak valid.");
   const value = validateFields(m.fields, data);
   if (kind === "BOM") quantity(value.outputQuantity);
+  if (kind === "PARTNER" && str(value.taxId).trim() && !validTaxId(value.taxId))
+    throw new Error(
+      "NPWP harus 15 atau 16 digit, atau NITKU 22 digit. Kosongkan bila belum ada.",
+    );
+  if (kind === "PURCHASE_QUOTA") {
+    if (quantity(str(value.maxQuantity)) <= 0n)
+      throw new Error("Kuantitas maksimum kuota harus lebih dari nol.");
+    if (
+      str(value.startDate) &&
+      str(value.endDate) &&
+      str(value.endDate) < str(value.startDate)
+    )
+      throw new Error("Akhir masa kuota mendahului tanggal mulai.");
+  }
   for (const key of ["cost", "salePrice", "contractValue", "reorder"])
     if (
       value[key] !== undefined &&
