@@ -15,7 +15,7 @@ STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 umask 077
 mkdir -p /srv/kunci/releases /var/backups/kunci
 chmod 700 /srv/kunci/releases /var/backups/kunci
-tar -tzf "$ARCHIVE" | grep -qE '(^|/)(\.env|data/|uploads/)' && { echo "Archive contains private files; aborting."; exit 3; }
+tar -tzf "$ARCHIVE" | grep -qE '(^|/)(\.env$|data/|uploads/)' && { echo "Archive contains private files; aborting."; exit 3; }
 /usr/local/sbin/kunci-backup
 runuser -u postgres -- pg_dump -Fc kunci > "/var/backups/kunci/pre-$LABEL-$STAMP.dump"
 PREVIOUS="/srv/kunci/releases/pre-$LABEL-$STAMP.tar.gz"
