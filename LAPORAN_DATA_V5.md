@@ -80,7 +80,7 @@ Dashboard Employees menampilkan **Kontrak habis dalam 30 hari** dan **Sertifikat
 | Unit | Aturan persetujuan, NPWP, pengelompokan management fee, rencana pengayaan, aturan PKWT/PKP | Lulus |
 | Integrasi (DB) | 76 tes, termasuk siklus transaksi, matriks persetujuan, kuota, FR-CA-003, isolasi perusahaan/cabang | Lulus (lokal; diulang di VM saat deploy) |
 | SIT lokal | UI browser v4: 19 dashboard modul, cakupan cabang, pencarian, tampilan seluler 390px; API kartu karyawan, kode gudang, ruang lingkup aset | Lulus |
-| PAT (produksi) | Smoke v3/v4 terhadap URL publik setelah deploy, dry-run lalu apply pengayaan, pemeriksaan idempotensi | Lihat hasil deploy |
+| PAT (produksi) | Deploy `v5-ce7d270`: 76/76 tes di VM; dry-run pengayaan identik dengan lokal, apply, lalu run ulang tanpa perubahan; smoke v3 dan v4 serta UI browser v4 terhadap URL publik | Lulus (19 November 2026, 09.00 UTC) |
 | UAT | Memerlukan pengguna Finance/HR/Operasional. Skrip di bawah | **Belum dilakukan.** Tidak dapat digantikan agen |
 
 ### Skrip UAT (diisi pengguna bisnis)
