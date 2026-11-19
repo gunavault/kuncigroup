@@ -40,6 +40,7 @@ import {
 import { Button } from "./ui/button";
 import { rupiah, amount, cents } from "@/lib/money";
 import { JournalForm } from "./journal-form";
+import { ModuleMiniDashboard } from "./module-mini-dashboard";
 import type { snapshot } from "@/lib/accounting";
 type Data = Awaited<ReturnType<typeof snapshot>>;
 type Wire<T> = T extends Date
@@ -540,6 +541,7 @@ export default function Workspace() {
             </div>
           ) : (
             <>
+              <ModuleMiniDashboard key={`${data.company.id}:${periodId}`} company={data.company.id} module="accounting" period={periodId} revision={data} />
               {page === 0 && (
                 <>
                   <div className="period-strip">

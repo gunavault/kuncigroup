@@ -1,4 +1,4 @@
-# Google Cloud runbook — Kunci Group ERP v2
+# Google Cloud runbook — Kunci Group ERP v4
 
 Project `kunci-group-erp-20261116`; VM `kunci-erp-pilot`; zone `us-central1-a`.
 
@@ -6,7 +6,7 @@ Project `kunci-group-erp-20261116`; VM `kunci-erp-pilot`; zone `us-central1-a`.
 
 - e2-micro, Debian 12, RAM 1 GiB + swap 3 GiB, disk standar 30 GB. Konfigurasi pilot dengan pengguna terbatas; belum diuji beban ribuan personel.
 - IP statis `34.9.120.7`, resource `kunci-erp-public`.
-- HTTPS utama: https://kunci-erp-45422633542.us-central1.run.app — Caddy dengan sertifikat otomatis. Port publik hanya HTTP/HTTPS; HTTP diarahkan ke HTTPS.
+- HTTPS utama: https://kunci-erp-45422633542.us-central1.run.app menggunakan TLS terkelola Cloud Run dan gateway nginx menuju backend privat VM. Caddy lama bukan jalur utama alamat ini.
 - Cloud Run `kunci-erp`: request-based billing, minimum0/maksimum1, 1CPU/512MiB, subnet `kunci-proxy` 10.20.0.0/26. Identitas `kunci-proxy` tidak memiliki hak API tambahan.
 - Backend Nginx `10.128.0.2:8081` hanya menerima subnet proxy: allow priority800, deny lainnya priority900. Pemeriksaan startup menguji gateway privat, terpisah dari status aplikasi.
 - Next.js hanya bind `127.0.0.1:3000`; nginx loopback8080 tetap tersedia untuk pemeriksaan lokal. PostgreSQL hanya loopback5432. SSH hanya via IAP.
@@ -24,6 +24,16 @@ sudo journalctl -u caddy -n 100
 Aplikasi `/srv/kunci/app`, user `kunci`, Node `/opt/node/bin/node`. `.env` memuat kredensial runtime, mode600. Akun database `kunci_app` hanya DML; UPDATE/DELETE audit dan mutasi stok dicabut. Pemilik migrasi `kunci_migrate`; kredensial root-only `/srv/kunci/migrate.env`. Lindungi kedua file.
 
 ## Pembaruan
+
+Rilis v4 memakai `deploy/upgrade-v4.sh`. Paket hanya source dari commit yang telah diuji; jangan sertakan `.env`, `data`, `uploads`, `outputs`, `artifacts` atau source workbook. Script mencadangkan database/lampiran/aplikasi, menerapkan migrasi katalog bersama, menguji pada schema sementara, membangun ulang dan menguji API. **Tidak menjalankan impor ulang** atau mereset data. Dependensi dipasang ulang hanya bila lockfile berubah atau belum tersedia.
+
+```bash
+sudo bash /home/dharma_regar/upgrade-v4.sh /home/dharma_regar/kunci-erp-v4.tar.gz
+```
+
+Sesudah layanan aktif, jalankan `scripts/smoke-v4.ts` dan `scripts/qa-ui-v4.mjs` pada HTTPS publik. `UI_URL` memilih tujuan QA, `SMOKE_URL` untuk smoke. QA v4 pada produksi hanya membaca data dan membuat/mencabut sesi; jangan menjalankan QA v3 yang membuat akun percobaan pada produksi. Backup dan `deploy/verify-restore-v3.sh` menguji pemulihan ke database sementara. Kegagalan upgrade memulihkan aplikasi sebelumnya tanpa mereset database bisnis.
+
+Perintah v2 berikut adalah riwayat rilis lama, bukan prosedur peningkatan v4.
 
 Paket kode harus berisi hanya source, lockfile, migrasi, konfigurasi dan script terpelihara. Paket impor terpisah hanya memuat `drive-normalized.json` dan `drive-inventory.ndjson`, bukan workbook mentah, foto identitas atau kredensial.
 

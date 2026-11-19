@@ -61,6 +61,7 @@ import {employeeModules} from "@/lib/roles";
 import {DataDetails} from "./data-details";
 import { SourceDataExplorer } from "./source-data-explorer";
 import { SettingsWorkspace } from "./settings-workspace";
+import { ModuleMiniDashboard } from "./module-mini-dashboard";
 const icons: Record<string, typeof Wallet> = {
   MessagesSquare,
   Wallet,
@@ -823,6 +824,7 @@ export default function OperationWorkspace() {
                   </Button>
                 </div>
               )}
+              {state.modules.some(m => m.key === view) && !state.actor.mustChangePassword && <ModuleMiniDashboard key={`${company}:${view}:${branch}:${query}`} company={company} module={view} branch={branch} query={query} revision={state} />}
               {(view === "home" || view === "dashboards") && (
                 <>
                   <section className="ops-hero">

@@ -5,7 +5,7 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {randomBytes} from 'node:crypto';
 import {PrismaClient} from '@prisma/client';
 const base=process.env.UI_URL??'http://127.0.0.1:3000',browser=await chromium.launch({channel:'msedge',headless:true}),context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),db=new PrismaClient();
-const checks=[],errors=[],username='qa-ui-'+Date.now(),password='QA '+randomBytes(18).toString('hex');mkdirSync('data/ui-qa-v3',{recursive:true});
+const checks=[],errors=[],username='qa-ui-'+Date.now(),password='QA '+randomBytes(18).toString('hex');mkdirSync('data/ui-qa-v3',{recursive:true});mkdirSync('artifacts',{recursive:true});
 page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(20000);
 const check=async(name,fn)=>{await fn();checks.push(name);console.log('PASS',name);};
 try{

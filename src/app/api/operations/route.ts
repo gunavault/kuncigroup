@@ -16,6 +16,7 @@ import {
   allowedBranches,
 } from "@/lib/auth";
 import { operationSnapshot } from "@/lib/operations/read";
+import { moduleMiniDashboard } from "@/lib/operations/mini-dashboard";
 import {
   saveRecord,
   saveMaster,
@@ -40,6 +41,9 @@ export async function GET(req: Request) {
         },
         { status: 428 },
       );
+    if (p.get('view') === 'module-kpis') return NextResponse.json(await moduleMiniDashboard(actor, companyId, p.get('module') ?? '', {
+      branchId: p.get('branch') || undefined, query: p.get('q') || undefined, periodId: p.get('period') || undefined,
+    }), { headers: { 'Cache-Control': 'no-store' } });
     if(p.get('view')==='source-data')return NextResponse.json(await sourceData(actor,companyId,p),{headers:{'Cache-Control':'no-store'}});
     if (p.get("view") === "accounts") {
       authorizeCompany(actor, companyId, [

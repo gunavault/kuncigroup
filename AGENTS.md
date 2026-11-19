@@ -19,6 +19,14 @@ This is the entry point for any coding agent (Claude Code, Codex, Cursor, …). 
 | [deploy/README.md](deploy/README.md) | Google Cloud runbook: topology, upgrade, backup, restore |
 | [WORK_PLAN_V3.md](WORK_PLAN_V3.md) | Latest work plan (v3: hierarchy, uploaded workbooks) and its status |
 | [LAPORAN_UJI_TUNTAS_V3.md](LAPORAN_UJI_TUNTAS_V3.md) | v3 data-quality and test report |
+| [WORK_PLAN_V4.md](WORK_PLAN_V4.md) | Current implementation and verification status |
+| [LAPORAN_UJI_TUNTAS_V4.md](LAPORAN_UJI_TUNTAS_V4.md) | Reconciliation, missing-data report and module cards |
+
+## Repository workflow required by the owner
+
+Before each logical change batch, `git fetch origin` and pull/merge current `main` without discarding local work. Use a feature branch. Run required checks, push all source changes and open a PR in `gunavault/kuncigroup`. Request review from and assign `gunavault`; do not merge your own PR. Never put private audit reports or source data in the public repository. Windows network credential helpers may require an approved shell; never print their output.
+
+`src/lib/operations/mini-dashboard.ts` contains complete scoped aggregates for all 19 modules. Cards do not use paginated results. Accounting renders them in its separate workspace too. Shared catalogs have `branchId=null`; employees, warehouses and assets retain physical branch scope. Data migration `202611190001_company_catalog_scope` preserves imported catalogs' source location and excludes manually verified branch catalogs.
 
 ## What this is
 
