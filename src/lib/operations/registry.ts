@@ -113,10 +113,20 @@ export const modules: ModuleDefinition[] = [
     color: "blue",
     fields: [
       f("documentType", "Jenis dokumen", "select", false, {
-        options: ["BILL", "ORDER", "RFQ"],
+        options: ["BILL", "ORDER", "RFQ", "REQUEST"],
+        hint: "REQUEST = Permintaan Pembelian dari lapangan sebelum RFQ/PO; tidak membentuk jurnal.",
       }),
-      f("partnerId", "Pemasok", "select", true, { master: "PARTNER" }),
-      f("dueDate", "Jatuh tempo", "date", true),
+      f("partnerId", "Pemasok", "select", false, {
+        master: "PARTNER",
+        hint: "Wajib kecuali untuk Permintaan Pembelian (REQUEST).",
+      }),
+      f("dueDate", "Jatuh tempo / tanggal dibutuhkan", "date", true),
+      f("projectId", "Proyek (kuota pembelian)", "select", false, {
+        master: "PROJECT",
+      }),
+      f("requestorId", "Peminta barang", "select", false, {
+        master: "EMPLOYEE",
+      }),
       f("warehouseId", "Gudang penerimaan", "select", false, {
         master: "WAREHOUSE",
       }),
@@ -424,7 +434,19 @@ export const masterDefinitions: Record<
       f("email", "Email"),
       f("phone", "Telepon"),
       f("address", "Alamat", "textarea"),
-      f("taxId", "NPWP perusahaan"),
+      f("taxId", "NPWP / NITKU", "text", false, {
+        hint: "NPWP 15 atau 16 digit, atau NITKU 22 digit. Titik/strip diabaikan.",
+      }),
+    ],
+  },
+  PURCHASE_QUOTA: {
+    label: "Kuota pembelian proyek",
+    fields: [
+      f("projectId", "Proyek", "select", true, { master: "PROJECT" }),
+      f("productId", "Barang", "select", true, { master: "PRODUCT" }),
+      f("maxQuantity", "Kuantitas maksimum", "number", true),
+      f("startDate", "Berlaku mulai", "date"),
+      f("endDate", "Berlaku sampai", "date"),
     ],
   },
   PRODUCT: {
@@ -437,6 +459,9 @@ export const masterDefinitions: Record<
       f("cost", "Harga pokok referensi", "number"),
       f("reorder", "Stok minimum", "number"),
       f("trackExpiry", "Wajib lot / kedaluwarsa", "checkbox"),
+      f("managementFee", "Management fee", "checkbox", false, {
+        hint: "Baris invoice dengan barang ini dikelompokkan pada seksi Management Fee di PDF.",
+      }),
     ],
   },
   EMPLOYEE: {

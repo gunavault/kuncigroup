@@ -15,6 +15,9 @@ data/
 uploads/
 artifacts/
 tmp/
+outputs/
+__pycache__/
+*.pyc
 *.tar.gz
 *.dump
 *.xlsx

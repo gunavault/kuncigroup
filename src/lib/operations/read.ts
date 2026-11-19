@@ -6,6 +6,7 @@ import { object, str } from "./shared";
 import { modules, definitions, masterDefinitions } from "./registry";
 import {userDirectory} from './users';
 import {assignedRole} from '../auth';
+import { masterBranchScope } from './master-scope';
 export async function operationSnapshot(
   actor: Actor,
   companyId: string,
@@ -41,17 +42,14 @@ export async function operationSnapshot(
   let masterWhere = {
     companyId,
     kind: { in: allowedMasterKinds },
-    ...branchFilter,
+    ...masterBranchScope(branches, options.branchId),
   } as import("@prisma/client").Prisma.MasterRecordWhereInput;
   // Company-wide masters are available in restricted branches; sensitive employees remain scoped.
   if (branches.length && !options.branchId)
     masterWhere = {
       companyId,
       kind: { in: allowedMasterKinds },
-      OR: [
-        { branchId: { in: branches } },
-        { branchId: null, kind: { not: "EMPLOYEE" } },
-      ],
+      ...masterBranchScope(branches, options.branchId),
     };
   if (options.kind)
     masterWhere.kind = allowedMasterKinds.includes(options.kind)
@@ -70,9 +68,7 @@ export async function operationSnapshot(
       OR: [
         {
           kind: { in: allowedMasterKinds },
-          ...(branches.length
-            ? { OR: [{ branchId: { in: branches } }, { branchId: null }] }
-            : {}),
+          ...masterBranchScope(branches, options.branchId),
         },
         {
           kind: "EMPLOYEE",

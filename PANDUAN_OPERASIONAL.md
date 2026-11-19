@@ -2,6 +2,16 @@
 
 Alamat masuk: https://kunci-erp-45422633542.us-central1.run.app. Semua langkah berikut dilakukan setelah login. Pilih perusahaan, kemudian cabang yang sesuai. Data DEMO hanya untuk latihan; jangan memakai jurnal DEMO untuk pembukuan KBA/KCG/KCL.
 
+## Ringkasan pada setiap modul
+
+Di atas setiap modul terdapat 4–6 kartu. Kartu menghitung seluruh register dalam hak akses, termasuk baris di halaman tabel berikutnya. Pilih perusahaan dan cabang sebelum membaca angka. Katalog barang/jasa, partner dan referensi organisasi yang ditetapkan bersama tetap tersedia saat memilih cabang; karyawan, gudang, aset dan saldo stok tetap mengikuti lokasi.
+
+Kartu dokumen mengikuti pencarian nomor/judul. Kartu master mengikuti nama/kode. Apps dan Settings merangkum konfigurasi, bukan hasil pencarian dokumen. Kartu absensi sumber berlabel seluruh tanggal dan terpisah dari filter register sumber di bawahnya. Accounting mengikuti periode fiskal terpilih; kartu laba buku besar pada Dashboards mencakup seluruh periode dan mengecualikan jurnal penutup. Panel analitik bulanan di bawahnya tetap berlabel bulan berjalan.
+
+Nilai piutang/kasbon/utang hanya menghitung dokumen POSTED yang mempunyai jurnal. Quotation/order yang dikonfirmasi tidak menambah nilai tersebut. Tanda — berarti hak akses belum mengizinkan nilai itu. Angka 0 berarti tidak ada data dalam cakupan yang dipilih. Saat memuat atau gagal, kartu menunjukkan status dan tombol Coba lagi.
+
+Rekap kekosongan Excel memuat kode dokumen/master, kolom yang belum lengkap, dasar pemeriksaan, prioritas, pemilik tindakan dan lokasi sumber. Gunakan filter untuk membedakan kolom wajib, persiapan operasional dan status impor. Isi PIC, target dan hasil tindak lanjut pada kolom kuning. Kosong dan selisih sumber harus dibuktikan, bukan diganti dengan nilai perkiraan.
+
 ## 1. Persiapan administrator dan Finance
 
 1. Settings: ubah kata sandi administrator; buat akun individu minimal 16 karakter. Pengguna baru diminta mengganti kata sandi saat login pertama.
@@ -85,3 +95,21 @@ Gunakan menu **Data unggahan** untuk menelusuri enam workbook, memfilter tanggal
 Di Settings, gunakan **Hierarki & manajemen pengguna** untuk membuat username/email individual, menetapkan peran, atasan, cabang dan karyawan. Kata sandi awal wajib diganti. Hak baru dan penonaktifan mencabut sesi lama. Baca matriks akses dan langkah pemeriksaan saldo awal stok dalam [laporan uji tuntas v3](LAPORAN_UJI_TUNTAS_V3.md).
 
 Jangan menjadikan angka sumber yang belum ditinjau sebagai ledger resmi. Ringkasan absensi, akun penampung, tanggal dan biaya unit yang belum terkonfirmasi tetap memerlukan keputusan HR/Finance.
+
+## Matriks persetujuan, verifikasi OPS dan kuota proyek
+
+Pemilik (akun superuser) mengatur **Settings → Perusahaan → Matriks persetujuan** per modul Purchase, Pembayaran, Cash Advance dan Expenses:
+
+- **Wajib verifikasi OPS**: setelah diajukan, dokumen menunggu tombol **Verifikasi OPS** dari Supervisor/Manager/Direktur/Administrator yang bukan pembuat. Tombol **Setujui** baru aktif setelah verifikasi.
+- **Batas Manager / Batas Direktur (IDR, termasuk pajak)**: nilai ≤ batas Manager disetujui Manager; ≤ batas Direktur disetujui Direktur; di atasnya hanya Administrator/BOD. Kosongkan kedua batas untuk persetujuan satu tingkat seperti sebelumnya. Finance tidak menyetujui dokumen bertingkat; Finance memposting.
+- Pembuat, verifikator OPS, pemberi persetujuan dan pemosting jurnal harus orang berbeda (pengecualian hanya akun pemilik untuk bootstrap).
+
+Alur pembelian yang disarankan: **REQUEST** (Permintaan Pembelian dari lapangan; pemasok boleh kosong; tidak membentuk jurnal) → **RFQ** → **ORDER** (PO; diverifikasi OPS dan disetujui sesuai batas) → penerimaan barang → **BILL** (tagihan, diposting Finance) → **Pembayaran** (dapat diberi batas persetujuan terpisah sebagai otorisasi pencairan BOD).
+
+**Kuota pembelian proyek**: buat master *Kuota pembelian proyek* (proyek, barang, kuantitas maksimum, periode). Saat PO (ORDER) dengan proyek tersebut disetujui, kuantitas PO yang sudah disetujui/diposting dijumlahkan. Bila melebihi sisa kuota, persetujuan ditolak dengan pesan "Melebihi batasan permintaan". Administrator dapat melakukan override dengan alasan minimal 10 karakter; alasan dan rincian kuota tercatat di dokumen dan jejak audit. Tagihan (BILL) tidak dihitung agar PO dan tagihannya tidak terhitung ganda.
+
+**Kasbon (FR-CA-003)**: pemegang kasbon tidak dapat mengajukan kasbon baru selama masih ada kasbon yang diajukan, disetujui, atau sudah dicairkan tetapi belum habis dipertanggungjawabkan/dikembalikan.
+
+**Management fee**: centang *Management fee* pada master barang/jasa. PDF dokumen memisahkan baris tersebut ke seksi Management Fee dengan subtotal masing-masing.
+
+**NPWP**: master pelanggan/pemasok hanya menerima NPWP 15/16 digit atau NITKU 22 digit (titik/strip diabaikan). Nilai seperti "not applicable" harus dikosongkan.

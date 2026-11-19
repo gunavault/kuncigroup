@@ -1,10 +1,12 @@
-# Kunci Group ERP — rilis operasional v3
+# Kunci Group ERP — rilis operasional v4
 
 ERP kustom Next.js/PostgreSQL dengan 19 aplikasi, alur persetujuan, pembukuan berpasangan, dan pemisahan data perusahaan/cabang. Kajian Odoo digunakan sebagai referensi kebutuhan. Aplikasi ini bukan instalasi Odoo dan tidak menggunakan lisensi Odoo Enterprise.
 
 Alamat publik sementara: **https://kunci-erp-45422633542.us-central1.run.app**. Login administrator: `admin@kuncigroup.cloud`; kata sandi tersimpan di file lokal `data/kunci-cloud-access.txt`, tidak di repositori atau dokumen ini. Semua data bisnis memerlukan login. Buka Settings untuk mengganti kata sandi dan membuat akun individu.
 
 Pembaruan 18 November 2026: enam workbook unggahan telah diperiksa dan diintegrasikan, dengan 20.759 catatan sumber, roster 221 karyawan dan hierarki Administrator/Direktur/Manager/Staf/Karyawan. Lihat [LAPORAN_UJI_TUNTAS_V3.md](LAPORAN_UJI_TUNTAS_V3.md) untuk jumlah, pengecualian sumber, penggunaan layar, matriks akses dan hasil pengujian.
+
+Pembaruan 19 November 2026: setiap 19 modul memiliki 4–6 kartu ringkasan. Hitungan memakai seluruh register yang diizinkan, mengikuti perusahaan/cabang/pengguna serta pencarian yang relevan. Nilai keuangan memakai jurnal POSTED; sumber dan estimasi tetap terpisah. Katalog bersama tetap tersedia saat memilih cabang. Lihat [LAPORAN_UJI_TUNTAS_V4.md](LAPORAN_UJI_TUNTAS_V4.md) dan [WORK_PLAN_V4.md](WORK_PLAN_V4.md). Excel/PPT berisi data nyata dan disimpan privat, tidak di GitHub.
 
 ## Kemampuan aplikasi
 
