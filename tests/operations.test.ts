@@ -1173,4 +1173,135 @@ await test("Operational ERP integration", async (t) => {
       await assert.rejects(finalize(r, admin, admin));
     },
   );
+  await t.test(
+    "approval matrix: OPS verification, amount tiers, project quota, SoD and FR-CA-003",
+    async () => {
+      const director = actor("director", "DIRECTOR"),
+        supervisor = actor("supervisor", "SUPERVISOR"),
+        manager2 = actor("manager2", "MANAGER"),
+        admin2 = actor("admin2", "ADMIN"),
+        finance2 = actor("finance2", "FINANCE");
+      const go = (who: Actor, r: any, action: string, reason?: string) =>
+        transitionRecord(who, {
+          companyId: "A",
+          id: r.id,
+          version: r.version,
+          action,
+          reason,
+        });
+      await db.company.update({
+        where: { id: "A" },
+        data: {
+          settings: {
+            accounting: map,
+            approval: {
+              purchase: {
+                requireOpsVerification: true,
+                managerLimit: "1000",
+                directorLimit: "5000",
+              },
+            },
+          },
+        },
+      });
+      try {
+        const project = await master("PROJECT", "PRJQ", { cluster: "CLEANING" });
+        await master("PURCHASE_QUOTA", "Q1", {
+          projectId: project.id,
+          productId: product.id,
+          maxQuantity: "8",
+        });
+        const po = (q: string, p = product, price = "100") =>
+          draft(
+            "purchase",
+            {
+              documentType: "ORDER",
+              partnerId: vendor.id,
+              dueDate: date,
+              projectId: project.id,
+              opsVerifiedBy: "forged",
+            },
+            [line(p.id, price, q)],
+            manager,
+          );
+        let a = await po("5");
+        assert.equal(object(a.data).opsVerifiedBy, undefined, "forged stamp stripped");
+        a = await go(manager, a, "submit");
+        await assert.rejects(go(director, a, "approve"), /verifikasi OPS/);
+        await assert.rejects(go(manager, a, "verify"), /Pembuat/);
+        a = await go(supervisor, a, "verify");
+        assert.equal(object(a.data).opsVerifiedBy, "supervisor");
+        await assert.rejects(go(supervisor, a, "verify"), /sudah diverifikasi/);
+        a = await go(manager2, a, "approve");
+        assert.equal(a.status, "APPROVED");
+        assert.equal(object(a.data).approvalTier, "MANAGER");
+
+        let b = await go(manager, await po("20", service), "submit");
+        b = await go(supervisor, b, "verify");
+        await assert.rejects(go(manager2, b, "approve"), /Direktur/);
+        b = await go(director, b, "approve");
+        assert.equal(object(b.data).approvalTier, "DIRECTOR");
+
+        let c = await go(manager, await po("90", service), "submit");
+        c = await go(supervisor, c, "verify");
+        await assert.rejects(go(director, c, "approve"), /Administrator/);
+        c = await go(admin2, c, "approve");
+        assert.equal(object(c.data).approvalTier, "ADMIN");
+
+        let q = await go(manager, await po("5"), "submit");
+        q = await go(supervisor, q, "verify");
+        await assert.rejects(go(manager2, q, "approve"), /batasan permintaan/);
+        await assert.rejects(go(admin2, q, "approve"), /alasan/);
+        q = await go(admin2, q, "approve", "Tambahan area proyek disetujui BOD");
+        assert.equal(object(object(q.data).quotaOverride).by, "admin2");
+
+        const request = await draft(
+          "purchase",
+          { documentType: "REQUEST", dueDate: date },
+          [line(product.id, "10", "2")],
+          manager,
+        );
+        assert.equal(object(request.data).documentType, "REQUEST");
+        await assert.rejects(
+          draft("purchase", { documentType: "ORDER", dueDate: date }, [
+            line(product.id, "10"),
+          ]),
+          /Pemasok wajib/,
+        );
+        for (const r of [b, c, q]) await abandon(r);
+        await abandon(a);
+      } finally {
+        await db.company.update({
+          where: { id: "A" },
+          data: { settings: { accounting: map } },
+        });
+      }
+
+      const holder = await master("EMPLOYEE", "EMPQ", { position: "Operator" });
+      const advance = () =>
+        draft(
+          "cash-advance",
+          { employeeId: holder.id, dueDate: "2026-11-30", purpose: "Uji FR-CA-003" },
+          [line(undefined, "300")],
+        );
+      let first = await go(admin, await advance(), "submit");
+      const second = await advance();
+      await assert.rejects(go(admin, second, "submit"), /kasbon terbuka/);
+      first = await go(finance, first, "approve");
+      await assert.rejects(go(finance, first, "post"), /Pemberi persetujuan/);
+      first = await go(finance2, first, "post");
+      assert.equal(first.status, "POSTED");
+      await assert.rejects(go(admin, second, "submit"), /kasbon terbuka/);
+      await abandon(second);
+
+      await assert.rejects(
+        master("PARTNER", "VENTAX", { type: "VENDOR", taxId: "12.345" }),
+        /NPWP/,
+      );
+      await master("PARTNER", "VENTAX", {
+        type: "VENDOR",
+        taxId: "01.234.567.8-901.000",
+      });
+    },
+  );
 });

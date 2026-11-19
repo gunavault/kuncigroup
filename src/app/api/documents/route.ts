@@ -57,9 +57,30 @@ export async function GET(req: Request) {
       ["lateMinutes", "Keterlambatan (menit)"],
       ["expectedCash", "Kas penjualan diharapkan (IDR)"],
       ["variance", "Selisih kas (IDR)"],
+      ["opsVerifiedName", "Diverifikasi OPS oleh"],
+      ["approvedName", "Disetujui oleh"],
+      ["approvalTier", "Tingkat persetujuan"],
     ] as const)
       if (data[key] !== undefined)
         fields.push({ label, value: str(data[key]) });
+    const feeProducts = new Set(
+      (
+        await db.masterRecord.findMany({
+          where: {
+            companyId,
+            kind: "PRODUCT",
+            id: {
+              in: r.lines
+                .map((l) => l.productId)
+                .filter((v): v is string => Boolean(v)),
+            },
+          },
+          select: { id: true, data: true },
+        })
+      )
+        .filter((p) => object(p.data).managementFee === true)
+        .map((p) => p.id),
+    );
     const bytes = await documentPdf({
       company: company.name,
       branch: branch?.name ?? "Perusahaan",
@@ -76,6 +97,10 @@ export async function GET(req: Request) {
         quantity: l.quantity.toString(),
         unitPrice: l.unitPrice.toString(),
         total: l.total.toString(),
+        group:
+          l.productId && feeProducts.has(l.productId)
+            ? "Management Fee"
+            : undefined,
       })),
     });
     return new Response(new Uint8Array(bytes), {

@@ -58,6 +58,7 @@ src/lib/accounting.ts    COA, journals, posting, reversal, period close
 src/lib/operations/      Module engine
   registry.ts              module + field definitions (19 modules)
   engine.ts                saveMaster / saveRecord / transitionRecord, the audit trail
+  approval.ts              approval matrix (OPS verify, Manager/Director/Admin limits), project quotas, NPWP
   stock.ts                 lots, FEFO, valuation
   read.ts                  scoped snapshots for the UI
   visibility.ts            company/branch/source scoping
@@ -119,6 +120,9 @@ npm.cmd run build        # prisma generate + next build
   - Sessions are opaque tokens stored hashed, and the cookie is HttpOnly, Secure and SameSite=Strict.
 - **Workflow:**
   - Records go draft → submitted → approved (by a different person) → posted.
+  - With an approval policy in `company.settings.approval`, `verify` (OPS) is required before `approve`. The maker, verifier, approver and poster must be different people.
+  - `workflowKeys` (`opsVerifiedBy`, `approvalTier`, …) are written only by `transitionRecord` and stripped on save. Never accept them from the client.
+  - The Odoo requirements mapping is in [KAJIAN_PARITAS_ODOO_HANDOVER.md](KAJIAN_PARITAS_ODOO_HANDOVER.md).
   - Nothing posts automatically, and imported data stays `IMPORTED` until a human verifies it.
 - **Source data:**
   - Empty is not zero, and formula errors stay errors. Never invent balances, GPS, timestamps or prices.
