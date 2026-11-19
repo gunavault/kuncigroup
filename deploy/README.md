@@ -33,6 +33,14 @@ sudo bash /home/dharma_regar/upgrade-v2.sh /home/dharma_regar/kunci-erp-v2.tar.g
 
 Upgrade menyalin dump sebelum migrasi dan source lama, menghentikan layanan selama instalasi/build, menjalankan migrasi, impor idempoten serta pengujian dalam schema terpisah. Build menggunakan satu worker dan memory limit640MB. Ini menimbulkan jeda layanan. Bila gagal, periksa log sebelum menjalankan ulang. Script tidak menghapus data bisnis.
 
+Rilis **khusus kode** (tanpa impor data) memakai `deploy/upgrade-code.sh`. Paket dibuat dari git sehingga `.env`, data dan unggahan tidak ikut, dan skrip menolak arsip yang memuatnya. Tahapnya: backup dan dump awal, salinan rilis lama, migrasi, tes dalam schema sementara, build, lalu restart. Bila satu langkah gagal, file aplikasi lama dipulihkan otomatis.
+
+```powershell
+git archive --format=tar.gz -o kunci-release.tar.gz <branch-atau-tag>
+gcloud.cmd compute scp kunci-release.tar.gz deploy/upgrade-code.sh kunci-erp-pilot:~ --project=kunci-group-erp-20261116 --zone=us-central1-a --tunnel-through-iap
+gcloud.cmd compute ssh kunci-erp-pilot --project=kunci-group-erp-20261116 --zone=us-central1-a --tunnel-through-iap --command "sudo bash ~/upgrade-code.sh ~/kunci-release.tar.gz <label>"
+```
+
 Smoke test setelah deploy dari direktori aplikasi:
 
 ```bash
