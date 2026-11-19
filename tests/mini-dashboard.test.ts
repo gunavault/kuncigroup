@@ -82,4 +82,13 @@ test("money cards exclude unposted imports and orders without journals, retain c
   const other = await db.fiscalPeriod.create({ data: { companyId: "B", name: "Other", startDate: new Date("2026-01-01"), endDate: new Date("2026-12-31") } });
   await assert.rejects(moduleMiniDashboard(admin, "A", "accounting", { periodId: other.id }));
 });
+test("settings counts the global owner while excluding users of another company and respecting branch filters", async () => {
+  const owner = await db.user.create({ data: { username: "owner-mini", name: "Global owner", passwordHash: "unused-test-fixture", isSuperuser: true } });
+  await db.user.create({ data: { username: "other-mini", name: "Other company", passwordHash: "unused-test-fixture", grants: { create: { companyId: "B", role: "STAFF" } } } });
+  const company = await moduleMiniDashboard(admin, "A", "settings");
+  assert.equal(value(company, "users"), "1"); assert.equal(value(company, "active"), "1"); assert.equal(value(company, "inactive"), "0");
+  assert.equal(value(await moduleMiniDashboard(admin, "A", "settings", { branchId: "A1" }), "users"), "0");
+  await db.user.update({ where: { id: owner.id }, data: { active: false } });
+  assert.equal(value(await moduleMiniDashboard(admin, "A", "settings"), "inactive"), "1");
+});
 after(async () => { await db.$disconnect(); await client.query(`DROP SCHEMA "${schema}" CASCADE`); await client.end(); });

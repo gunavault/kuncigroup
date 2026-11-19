@@ -23,7 +23,7 @@ Workbook asli memuat sembilan error cache pada kolom absensi yang dikecualikan d
 
 ## Pengujian
 
-TypeScript, build Next.js produksi dan 72 pengujian lulus pada rilis gabungan lokal. Lima pengujian dashboard baru meliputi seluruh modul, agregasi lebih dari satu halaman, cakupan perusahaan/cabang/pemilik, pencarian, migrasi katalog yang aman diulang, ketelitian sen, order tanpa jurnal dan pengaruh jurnal penutup. Perubahan approval pada branch `feat/odoo-handover-parity` dipertahankan: verifikasi OPS, batas persetujuan, kuota proyek, pemisahan pelaksana dan Management Fee PDF. Pengujiannya masuk rangkaian yang sama.
+TypeScript, build Next.js produksi dan 73 pengujian lulus pada rilis gabungan lokal. Lima pengujian dashboard baru meliputi seluruh modul, agregasi lebih dari satu halaman, cakupan perusahaan/cabang/pemilik, pencarian, migrasi katalog yang aman diulang, ketelitian sen, order tanpa jurnal dan pengaruh jurnal penutup. Perubahan approval pada branch `feat/odoo-handover-parity` dipertahankan: verifikasi OPS, batas persetujuan, kuota proyek, pemisahan pelaksana dan Management Fee PDF. Pengujiannya masuk rangkaian yang sama.
 
 Playwright memakai profil Edge terisolasi. Pemeriksaan desktop 1440×1000 dan ponsel 390×844 mencakup seluruh 19 modul, jumlah kartu, pemuatan API, cache, pencarian dan batas viewport. Tujuh kelompok regresi v3 memeriksa filter sumber/absensi/stok, pagination, detail master, formulir transaksi dan pengelolaan akun/peran/atasan/cabang/profil/reset/deaktivasi. Tidak ada error JavaScript selama skenario tersebut.
 
@@ -43,3 +43,5 @@ Context7 terhubung dan digunakan untuk route Next.js 16 dan agregasi Prisma 6. `
 ## Batas penerimaan
 
 Skenario otomatis tidak membuktikan semua kemungkinan input/perangkat bebas masalah. UAT Finance, bukti payroll aktual, konfirmasi bank, pemadanan identitas, stok fisik/biaya, kamera/GPS di lokasi dan uji beban masih memerlukan pelaksanaan/persetujuan pemilik proses. Nilai yang belum didukung bukti tetap kosong atau berstatus tinjauan. Tidak ada pernyataan bahwa data sumber telah sempurna atau dapat dipakai sebagai laporan audit final.
+
+Hitungan Settings menyertakan administrator global pada cakupan perusahaan, tetap membatasi pengguna perusahaan lain dan filter cabang. Pengujian khusus membuktikan kasus tanpa grant perusahaan, akun nonaktif serta cakupan cabang. Uji browser memeriksa pemilihan filter cabang secara langsung.

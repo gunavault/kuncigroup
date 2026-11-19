@@ -21,21 +21,30 @@ try {
       const url = m.key === 'accounting' ? '/accounting?company=KBA' : '/?module=' + m.key;
       await page.goto(base + url); const dashboard = page.getByRole('region', { name: 'Ringkasan modul', exact: true });
       // <section aria-label> creates an accessible region.
-      await dashboard.waitFor(); await page.waitForFunction(() => document.querySelector('.module-mini-dashboard')?.getAttribute('aria-busy') === 'false');
-      await page.waitForFunction(() => { const d = document.querySelector('.module-mini-dashboard'); return d && d.getAttribute('aria-busy') === 'false' && !d.textContent.includes('Memuat…'); });
-      assert.equal(await dashboard.locator('.alert.error').count(), 0, m.key);
-      const count = await dashboard.locator('.module-mini-card').count(); assert.ok(count >= 4 && count <= 6, m.key);
-      assert.ok(!(await dashboard.innerText()).includes('Memuat…'), m.key);
+      await dashboard.waitFor();
       const r = await context.request.get(base + '/api/operations?' + new URLSearchParams({ view: 'module-kpis', company: 'KBA', module: m.key }));
       assert.equal(r.status(), 200, m.key); assert.match(r.headers()['cache-control'], /no-store/);
-      const data = await r.json(); assert.equal(data.cards.length, count, m.key);
+      const data = await r.json();
+      const rendered = await page.waitForFunction(key => {
+        const d = document.querySelector('.module-mini-dashboard');
+        if (!d || d.dataset.module !== key || d.getAttribute('aria-busy') !== 'false' || d.textContent.includes('Memuat…')) return false;
+        return { count: d.querySelectorAll('.module-mini-card').length, error: d.querySelector('.alert.error')?.textContent ?? '' };
+      }, m.key);
+      const visible = await rendered.jsonValue();
+      assert.equal(visible.error, '', m.key); assert.ok(visible.count >= 4 && visible.count <= 6, m.key);
+      assert.equal(data.cards.length, visible.count, m.key);
+      if (m.key === 'settings') {
+        const expected = state.users.filter(u => u.isSuperuser || u.grants.some(g => g.companyId === 'KBA')).length;
+        assert.equal(Number(data.cards.find(c => c.key === 'users').value), expected, 'Settings includes the global owner and company users');
+      }
     }
   });
   await check('branch selection preserves shared catalog and module cards stay scoped', async () => {
     const b = state.branches[0]; assert.ok(b);
     await page.goto(base + '/?module=sales'); await page.locator('.module-mini-card').first().waitFor();
-    const branchSelect = page.getByLabel('Cabang / lokasi', { exact: true });
-    if (await branchSelect.count()) await branchSelect.selectOption(b.id);
+    const branchSelect = page.getByLabel('Filter cabang', { exact: true });
+    await branchSelect.selectOption(b.id);
+    await page.waitForFunction(() => document.querySelector('.module-mini-heading')?.textContent.includes('Cabang terpilih'));
     const r = await (await context.request.get(base + '/api/operations?' + new URLSearchParams({ company: 'KBA', branch: b.id }))).json();
     assert.ok(r.masters.filter(m => m.branchId === null).every(m => ['PRODUCT','PARTNER','BOM','DEPARTMENT','POSITION','ASSET_CLASS'].includes(m.kind)));
     const cards = await (await context.request.get(base + '/api/operations?' + new URLSearchParams({ view: 'module-kpis', company: 'KBA', module: 'sales', branch: b.id }))).json();

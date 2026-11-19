@@ -20,7 +20,7 @@ export function ModuleMiniDashboard({ company, module, branch = "", query = "", 
     }, 150);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [company, module, branch, query, period, revision, retry]);
-  return <section className="module-mini-dashboard" aria-label="Ringkasan modul" aria-busy={!result && !error}>
+  return <section className="module-mini-dashboard" data-module={module} aria-label="Ringkasan modul" aria-busy={!result && !error}>
     <div className="module-mini-heading"><span>Ringkasan modul</span><small>{result?.scope ?? (error ? "Ringkasan belum tersedia" : "Memuat ringkasan…")}</small></div>
     {error ? <div className="alert error" role="alert">{error}<button type="button" onClick={() => setRetry(n => n + 1)}>Coba lagi</button></div> : <div className="module-mini-grid">
       {(result?.cards ?? Array.from({ length: 6 }, (_, i) => ({ key: String(i), label: "Memuat…", value: null, format: "count", detail: "" }))).map(card => <article key={card.key} className="module-mini-card" title={card.detail}>
