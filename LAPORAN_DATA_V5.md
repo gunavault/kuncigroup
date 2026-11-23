@@ -26,7 +26,7 @@ Kedua dokumen di bawah buatan AI. Isinya diperlakukan sebagai bahan yang harus d
 - **"Keenam workbook terbaca kosong (zero-text)."** Ini berlaku untuk alat ekstraksi AI tersebut, bukan untuk ERP ini. Keenam workbook sudah diekstrak penuh di v3: 20.759 catatan sumber, 221 roster, 190 snapshot stok, 4.245 baris jurnal sumber.
 - **"Treasury Master List"** ditemukan di Drive. File ini adalah spreadsheet hidup milik tim Treasury yang masih diedit dan menurut kajian memuat nomor rekening.
   - Tidak diimpor. Snapshot sekali jalan akan cepat basi dan memindahkan data rekening ke ERP.
-  - Angka total yang dikutip kajian (ajuan Rp8.128.557.792, terbayar Rp7.571.196.390) **belum diverifikasi**.
+  - Angka total yang dikutip kajian (total ajuan dan terbayar) **belum diverifikasi**.
   - Rekomendasi: integrasi resmi dengan Treasury, termasuk keputusan pemilik data.
 - **Klaim regulasi** sebagian besar sejalan dengan rujukan umum: PP 35/2021, PP 36/2021, PSAK 202/216/115, PMK 131/2024, UU PDP. Rinciannya tetap perlu dikonfirmasi HR, Finance dan konsultan pajak.
   - Contoh tarif BPJS (4% pemberi kerja, 1% pekerja untuk BPJS Kesehatan) adalah aturan payroll yang tidak dihitung ERP ini.
@@ -36,14 +36,14 @@ Kedua dokumen di bawah buatan AI. Isinya diperlakukan sebagai bahan yang harus d
 
 Nilai invoice di Manual Guide (database uji Odoo `kunci13`) dicocokkan dengan penjualan yang sudah diimpor:
 
-| Invoice di manual | Nilai terlihat | Ada di ERP? |
+| Invoice di manual | Nilai | Ada di ERP? |
 |---|---|---|
-| INV/2026/00007 PT Kunci Boga Lestari, 13 April | 2.340.000 | **Ya** (KBA, 2026-04-13) |
-| INV/2026/00001 PT Garuda Maintenance Facility | 97.215.019,… (terpotong) | Tidak |
-| INV/2026/00002 KUFPEC Indonesia | 2.445.300 | Tidak |
-| INV/2026/00003, 00004, 00008 KLH | 119.597.37… (terpotong) | Tidak |
-| INV/2026/00005, 00006 Pemkot Bekasi Dispora | 1.059.567,… (terpotong) | Tidak |
-| INV/2026/00010 KLH Bonas/Rumdin, Mei | 16.826.785,98 | Tidak |
+| INV/2026/00007 PT Kunci Boga Lestari, 13 April | (nominal di laporan internal) | **Ya** (KBA, 2026-04-13) |
+| INV/2026/00001 PT Garuda Maintenance Facility | (nominal di laporan internal) | Tidak |
+| INV/2026/00002 KUFPEC Indonesia | (nominal di laporan internal) | Tidak |
+| INV/2026/00003, 00004, 00008 KLH | (nominal di laporan internal) | Tidak |
+| INV/2026/00005, 00006 Pemkot Bekasi Dispora | (nominal di laporan internal) | Tidak |
+| INV/2026/00010 KLH Bonas/Rumdin, Mei | (nominal di laporan internal) | Tidak |
 
 **Tidak ada transaksi yang dibuat dari tangkapan layar.** Nilainya terpotong, sumbernya database uji, dan status pembayarannya tidak dapat dipastikan. Finance perlu mengekspor daftar invoice resmi dari Odoo produksi (`kunci_prod_db`) atau dari arsip faktur pajak. Setelah itu data dapat diimpor sebagai dokumen `IMPORTED` yang wajib diverifikasi.
 

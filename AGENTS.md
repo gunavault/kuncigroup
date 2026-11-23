@@ -22,6 +22,7 @@ This is the entry point for any coding agent (Claude Code, Codex, Cursor, …). 
 | [WORK_PLAN_V4.md](WORK_PLAN_V4.md) | Current implementation and verification status |
 | [LAPORAN_UJI_TUNTAS_V4.md](LAPORAN_UJI_TUNTAS_V4.md) | Reconciliation, missing-data report and module cards |
 | [LAPORAN_DATA_V5.md](LAPORAN_DATA_V5.md) | Master-data v5: evaluation of AI-generated schema/audit docs, proven enrichment, UAT script |
+| [LAPORAN_KEUANGAN_V6.md](LAPORAN_KEUANGAN_V6.md) | v6: working-paper ledger for KBA 2026, reconciliation, management report and dashboards |
 
 ## Repository workflow required by the owner
 
@@ -132,6 +133,7 @@ npm.cmd run build        # prisma generate + next build
   - With an approval policy in `company.settings.approval`, `verify` (OPS) is required before `approve`. The maker, verifier, approver and poster must be different people.
   - `workflowKeys` (`opsVerifiedBy`, `approvalTier`, …) are written only by `transitionRecord` and stripped on save. Never accept them from the client.
   - The Odoo requirements mapping is in [KAJIAN_PARITAS_ODOO_HANDOVER.md](KAJIAN_PARITAS_ODOO_HANDOVER.md).
+  - `company.settings.historicalLedger` marks a date window already booked from the accountant's working paper. Operational documents dated inside it must not post to the ledger (guarded in `transitionRecord`). Corrections go in as adjusting journals.
   - Nothing posts automatically, and imported data stays `IMPORTED` until a human verifies it.
 - **Source data:**
   - Empty is not zero, and formula errors stay errors. Never invent balances, GPS, timestamps or prices.
@@ -141,7 +143,7 @@ npm.cmd run build        # prisma generate + next build
 ## `scripts/` — read before running anything
 
 - **Maintained:**
-  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`, `enrich-master-v5.ts` (dry-run by default; `--apply` writes proven values only).
+  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`, `enrich-master-v5.ts` (dry-run by default; `--apply` writes proven values only), `post-working-paper-kba-2026.ts` (dry-run by default; refuses to run twice).
   - Report, verify and QA scripts: `report-import.ts`, `verify-*.ts`, `qa-*.{ts,mjs}`.
   - Smoke scripts (`smoke-*.ts`): they read the `SMOKE_URL` / `APP_PASSWORD` env vars.
 - **One-off patchers — DO NOT RUN.** These files string-replace code in `src/`, `prisma/schema.prisma` or `tests/`. They were already applied and re-running them corrupts code:

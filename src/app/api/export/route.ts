@@ -3,6 +3,8 @@ import { requireActor, authorizeCompany, allowedBranches } from "@/lib/auth";
 import { db } from "@/lib/db";
 import ExcelJS from "exceljs";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { managementReport } from "@/lib/management-report";
+import { managementPdf, managementXlsx } from "@/lib/management-export";
 export const runtime = "nodejs";
 export async function GET(req: Request) {
   try {
@@ -12,7 +14,7 @@ export async function GET(req: Request) {
     const period = id
       ? await db.fiscalPeriod.findUniqueOrThrow({ where: { id } })
       : null;
-    const company = period?.companyId ?? "DEMO";
+    const company = period?.companyId ?? url.searchParams.get("company") ?? "DEMO";
     authorizeCompany(actor, company, [
       "ADMIN",
       "FINANCE",
@@ -21,6 +23,23 @@ export async function GET(req: Request) {
     ]);
     if (actor.mustChangePassword || allowedBranches(actor, company).length)
       throw new Error("Akses laporan tidak diizinkan.");
+    if (url.searchParams.get("report") === "management") {
+      const m = await managementReport(company, id ?? undefined);
+      const pdf = url.searchParams.get("format") === "pdf";
+      const name = `laporan-manajemen-${m.company.id}-${m.period.name}`.replace(/[^A-Za-z0-9-]+/g, "-");
+      return new Response(
+        new Uint8Array(pdf ? await managementPdf(m) : await managementXlsx(m)),
+        {
+          headers: {
+            "Content-Type": pdf
+              ? "application/pdf"
+              : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "Content-Disposition": `attachment; filename="${name}.${pdf ? "pdf" : "xlsx"}"`,
+            "Cache-Control": "no-store",
+          },
+        },
+      );
+    }
     const s = await snapshot(id ?? undefined, company);
     const r = s.report;
     const summary = [
@@ -50,7 +69,7 @@ export async function GET(req: Request) {
           page = pdf.addPage([595, 842]);
           y = 795;
         }
-        page.drawText(text.normalize("NFKD").replace(/[^\x20-\x7E]/g, "?"), {
+        page.drawText(text.normalize("NFKD").replace(/[–—]/g, "-").replace(/·/g, "|").replace(/[^\x20-\x7E]/g, "?"), {
           x: 40,
           y,
           size,

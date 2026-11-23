@@ -9,6 +9,7 @@ import {
 } from "./money";
 import { journalSchema, accountSchema } from "./validation";
 import { object, str } from "./operations/shared";
+import { historicalWindow } from "./working-paper-ledger";
 type Tx = Prisma.TransactionClient;
 const include = {
   lines: { include: { account: true } },
@@ -492,12 +493,28 @@ export async function closePeriod(pid: string, actorId?: string) {
       })
     )
       throw new Error("Posting seluruh draft sebelum tutup buku.");
+    // Imported historical documents inside the window booked from the working paper are
+    // already in the ledger (via the working-paper journals); they do not block closing.
+    const history = historicalWindow(
+      (await tx.company.findUnique({ where: { id: p.companyId } }))?.settings,
+    );
     if (
       await tx.businessRecord.count({
         where: {
           companyId: p.companyId,
           date: { gte: p.startDate, lte: p.endDate },
           status: { in: ["IMPORTED", "DRAFT", "SUBMITTED", "APPROVED"] },
+          ...(history
+            ? {
+                NOT: {
+                  status: "IMPORTED",
+                  date: {
+                    gte: new Date(history.from + "T00:00:00Z"),
+                    lte: new Date(history.through + "T00:00:00Z"),
+                  },
+                },
+              }
+            : {}),
         },
       })
     )
@@ -530,28 +547,41 @@ export async function closePeriod(pid: string, actorId?: string) {
     const end = new Date(
       Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0),
     );
-    if (
-      await tx.fiscalPeriod.count({
-        where: {
-          companyId: p.companyId,
-          startDate: { lte: end },
-          endDate: { gte: start },
-        },
-      })
-    )
-      throw new Error("Periode berikutnya sudah ada atau bertumpang tindih.");
-    const next = await tx.fiscalPeriod.create({
-      data: {
+    const overlapping = await tx.fiscalPeriod.findMany({
+      where: {
         companyId: p.companyId,
-        name: new Intl.DateTimeFormat("id-ID", {
-          month: "long",
-          year: "numeric",
-          timeZone: "UTC",
-        }).format(start),
-        startDate: start,
-        endDate: end,
+        startDate: { lte: end },
+        endDate: { gte: start },
       },
     });
+    // Reuse the following month when it was already opened for live operations
+    // (exactly that month, still open, no opening balance yet); otherwise refuse.
+    const existing =
+      overlapping.length === 1 &&
+      overlapping[0].status === "OPEN" &&
+      overlapping[0].startDate.getTime() === start.getTime() &&
+      overlapping[0].endDate.getTime() === end.getTime() &&
+      !(await tx.journalEntry.count({
+        where: { fiscalPeriodId: overlapping[0].id, type: "OPENING" },
+      }))
+        ? overlapping[0]
+        : null;
+    if (overlapping.length && !existing)
+      throw new Error("Periode berikutnya sudah ada atau bertumpang tindih.");
+    const next =
+      existing ??
+      (await tx.fiscalPeriod.create({
+        data: {
+          companyId: p.companyId,
+          name: new Intl.DateTimeFormat("id-ID", {
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          }).format(start),
+          startDate: start,
+          endDate: end,
+        },
+      }));
     if (lines.length)
       await insert(
         tx,
@@ -584,7 +614,20 @@ export async function snapshot(pid?: string, companyId = "DEMO") {
         where: { companyId },
         orderBy: { startDate: "desc" },
       });
-      const period = periods.find((p) => p.id === pid) ?? periods[0];
+      // Default to the latest period that already has posted entries, so the reports
+      // never open on an empty month while booked periods exist.
+      const withEntries = pid
+        ? []
+        : await tx.journalEntry.groupBy({
+            by: ["fiscalPeriodId"],
+            where: { companyId, status: "POSTED" },
+          });
+      const period =
+        periods.find((p) => p.id === pid) ??
+        periods.find((p) =>
+          withEntries.some((e) => e.fiscalPeriodId === p.id),
+        ) ??
+        periods[0];
       if (!period) throw new Error("Jalankan seed database terlebih dahulu.");
       const r = await reports(tx, period.id);
       const journals = await tx.journalEntry.findMany({

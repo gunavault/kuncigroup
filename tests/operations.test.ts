@@ -1304,4 +1304,25 @@ await test("Operational ERP integration", async (t) => {
       });
     },
   );
+  await t.test(
+    "documents inside a period booked from the working paper cannot be posted twice",
+    async () => {
+      await db.company.update({
+        where: { id: "A" },
+        data: {
+          settings: {
+            accounting: map,
+            historicalLedger: { from: "2026-11-01", through: "2026-11-30", source: "Kertas kerja uji" },
+          },
+        },
+      });
+      try {
+        const r = await draft("purchase", { partnerId: vendor.id, dueDate: date }, [line(service.id, "10")]);
+        await assert.rejects(finalize(r), /sudah dibukukan dari Kertas kerja uji/);
+        await abandon(r);
+      } finally {
+        await db.company.update({ where: { id: "A" }, data: { settings: { accounting: map } } });
+      }
+    },
+  );
 });

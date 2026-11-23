@@ -120,3 +120,11 @@ Alur pembelian yang disarankan: **REQUEST** (Permintaan Pembelian dari lapangan;
 - **Aset:** *Ruang lingkup* (Head Office/Proyek) sudah diisi dari jejak workbook sumber. *Kelompok harta fiskal* ditetapkan Finance.
 - **Gudang:** *Kode lokasi Odoo* membantu rekonsiliasi migrasi. Gudang KBAHO dibuat dengan status menunggu verifikasi. Duplikat dan lokasi GOR yang belum dipetakan tercantum di LAPORAN_DATA_V5.md.
 - **Partner:** tandai *PKP* hanya bila NPWP/NITKU tersedia.
+
+## Buku besar 2026 dan laporan manajemen (v6)
+
+- Jurnal Januari–Oktober 2026 KBA telah dibukukan dari *Kertas Kerja Akuntansi KBA 2026* ke periode **Januari s.d. Oktober 2026 (kertas kerja)**. Periode ini dibiarkan terbuka. Koreksi atas temuan dicatat sebagai jurnal penyesuaian di periode tersebut. Saat Finance menutup periode, saldo dibawa ke November.
+- Dokumen operasional bertanggal dalam rentang itu tidak dapat diposting lagi agar buku besar tidak terhitung ganda.
+- **Accounting → Laporan manajemen** menyajikan laba rugi bertingkat, tren bulanan, posisi, arus kas, biaya terbesar, narasi otomatis dan temuan kertas kerja. Laporan dapat diunduh dalam PDF dan Excel.
+- Dashboard laba rugi per cabang menampilkan bulan terakhir yang sudah dibukukan bila bulan berjalan belum memiliki jurnal.
+- Rincian rekonsiliasi dan batasan ada di LAPORAN_KEUANGAN_V6.md.

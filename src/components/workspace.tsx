@@ -35,12 +35,14 @@ import {
   Layers3,
   Scale,
   ChartNoAxesCombined,
+  ClipboardList,
   X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { rupiah, amount, cents } from "@/lib/money";
 import { JournalForm } from "./journal-form";
 import { ModuleMiniDashboard } from "./module-mini-dashboard";
+import { ManagementReportView } from "./management-report-view";
 import type { snapshot } from "@/lib/accounting";
 type Data = Awaited<ReturnType<typeof snapshot>>;
 type Wire<T> = T extends Date
@@ -62,6 +64,7 @@ const nav = [
   ["Penyesuaian", SlidersHorizontal],
   ["Laporan keuangan", ChartNoAxesCombined],
   ["Tutup buku", LockKeyhole],
+  ["Laporan manajemen", ClipboardList],
 ] as const;
 const date = (v: string) =>
   new Date(v).toLocaleDateString("id-ID", {
@@ -353,22 +356,30 @@ export default function Workspace() {
         (!from || v.entry.transactionDate.slice(0, 10) >= from) &&
         (!to || v.entry.transactionDate.slice(0, 10) <= to),
     );
-  const chart = [
-    "01",
-    "03",
-    "05",
-    "08",
-    "12",
-    "16",
-    "20",
-    "24",
-    "28",
-    "31",
-  ].map((d) => {
+  // Cumulative revenue/expense: per day for a one-month period, per month for longer periods.
+  const periodStart = String(data?.period.startDate ?? "").slice(0, 10),
+    periodEnd = String(data?.period.endDate ?? "").slice(0, 10),
+    multiMonth = periodStart.slice(0, 7) !== periodEnd.slice(0, 7);
+  const buckets: { key: string; label: string }[] = multiMonth
+    ? (() => {
+        const out: { key: string; label: string }[] = [];
+        const d = new Date(periodStart.slice(0, 7) + "-01T00:00:00Z");
+        while (d.toISOString().slice(0, 7) <= periodEnd.slice(0, 7) && out.length < 36) {
+          out.push({
+            key: d.toISOString().slice(0, 7),
+            label: d.toLocaleDateString("id-ID", { month: "short", timeZone: "UTC" }),
+          });
+          d.setUTCMonth(d.getUTCMonth() + 1);
+        }
+        return out;
+      })()
+    : ["01", "03", "05", "08", "12", "16", "20", "24", "28", "31"].map((d) => ({ key: d, label: d }));
+  const chart = buckets.map(({ key, label }) => {
+    const d = key;
     let revenue = 0n,
       expense = 0n;
     for (const e of r?.entries ?? [])
-      if (e.transactionDate.slice(8, 10) <= d)
+      if ((multiMonth ? e.transactionDate.slice(0, 7) : e.transactionDate.slice(8, 10)) <= d)
         for (const l of e.lines) {
           if (l.account.category === "PENDAPATAN")
             revenue += cents(String(l.credit)) - cents(String(l.debit));
@@ -376,7 +387,7 @@ export default function Workspace() {
             expense += cents(String(l.debit)) - cents(String(l.credit));
         }
     return {
-      day: d,
+      day: label,
       pendapatan: Number(amount(revenue)),
       beban: Number(amount(expense)),
     };
@@ -669,7 +680,14 @@ export default function Workspace() {
                               tickLine={false}
                               axisLine={false}
                               tick={{ fontSize: 11, fill: "#84918e" }}
-                              width={48}
+                              width={64}
+                              tickFormatter={(v: number) =>
+                                Math.abs(v) >= 1e9
+                                  ? `${(v / 1e9).toLocaleString("id-ID", { maximumFractionDigits: 1 })} M`
+                                  : Math.abs(v) >= 1e6
+                                    ? `${(v / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 1 })} jt`
+                                    : v.toLocaleString("id-ID")
+                              }
                             />
                             <Tooltip
                               formatter={(value) => rupiah(String(value))}
@@ -1147,6 +1165,12 @@ export default function Workspace() {
                     memformat hasilnya.
                   </div>
                 </>
+              )}
+              {page === 8 && data && (
+                <ManagementReportView
+                  company={data.company.id}
+                  periodId={periodId}
+                />
               )}
               {page === 7 && (
                 <>

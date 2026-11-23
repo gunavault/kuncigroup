@@ -86,6 +86,8 @@ const icons: Record<string, typeof Wallet> = {
 export type AppState = {
   insights: {
     month: string;
+    ledgerMonth?: string;
+    ledgerBasis?: "BULAN_BERJALAN" | "BULAN_TERAKHIR_TERSEDIA";
     financial: boolean;
     branches: {
       branchId: string | null;
@@ -1951,10 +1953,14 @@ function Insights({ state }: { state: AppState }) {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Laba rugi per cabang ? {state.insights.month}</h2>
+              <h2>
+                Laba rugi per cabang · {state.insights.ledgerMonth ?? state.insights.month}
+              </h2>
               <p>
                 Pendapatan dan beban dari buku besar yang diposting, tanpa
-                jurnal penutup. Penjualan ditampilkan sebelum PPN.
+                jurnal penutup dan saldo awal. Penjualan ditampilkan sebelum PPN.
+                {state.insights.ledgerBasis === "BULAN_TERAKHIR_TERSEDIA" &&
+                  ` Bulan berjalan (${state.insights.month}) belum memiliki jurnal; ditampilkan bulan terakhir yang telah dibukukan.`}
               </p>
             </div>
           </div>
@@ -1994,7 +2000,7 @@ function Insights({ state }: { state: AppState }) {
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <h2>Penyelesaian WO per proyek ? {state.insights.month}</h2>
+            <h2>Penyelesaian WO per proyek · {state.insights.month}</h2>
             <p>
               Ketepatan waktu memakai tanggal penyelesaian aktual dan target WO.
               Sasaran SLA ditetapkan pada master proyek.

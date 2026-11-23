@@ -29,6 +29,7 @@ import {
 import { definitions, masterDefinitions, financialModules } from "./registry";
 import { receiveStock, takeStock } from "./stock";
 import { operationalEffects } from "./ancillary";
+import { historicalWindow, inWindow } from "../working-paper-ledger";
 import {
   modulePolicy,
   requiredTier,
@@ -801,6 +802,12 @@ export async function transitionRecord(actor: Actor, input: unknown) {
       if (needsFinance && !actor.superuser && r.approvedBy === actor.id)
         throw new Error(
           "Pemberi persetujuan tidak dapat memposting dokumen yang sama.",
+        );
+      // Periods already booked from the accountant's working paper must not be booked twice.
+      const history = historicalWindow(company.settings);
+      if (needsFinance && history && inWindow(history, r.date))
+        throw new Error(
+          `Periode ${history.from} s.d. ${history.through} sudah dibukukan dari ${history.source}. Posting dokumen ini akan menggandakan buku besar; catat koreksi sebagai jurnal penyesuaian.`,
         );
       if (
         !needsFinance &&
