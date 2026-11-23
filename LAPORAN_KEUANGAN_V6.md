@@ -78,4 +78,4 @@ Catatan kualitatif:
 | Integrasi DB | 83 tes; termasuk penolakan posting di dalam jendela historis dan penutupan ke periode berikutnya yang sudah ada: lulus |
 | Rekonsiliasi | Seluruh uji pada bagian 2: cocok |
 | SIT browser lokal (`scripts/qa-ui-v6.mjs`) | 6 pemeriksaan: periode default, KPI, laporan keuangan, laporan manajemen, ekspor PDF/Excel, dashboard bulan terakhir: lulus |
-| PAT produksi | Lihat catatan deploy |
+| PAT produksi (23 November 2026) | Deploy `v6-21e32e3`: 83/83 tes di VM. Uji coba posting identik dengan lokal, lalu posting 2.000 voucher; penolakan posting ulang terbukti. Sembilan angka kunci produksi sama persis dengan lokal. QA browser v6 (6) dan v4 (4), smoke v3 dan v4 terhadap URL publik: lulus |
