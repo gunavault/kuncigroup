@@ -70,6 +70,8 @@ export function FinancialTrace({ company, period, selection, onClose }: { compan
             {!j.documents.length && <p>Belum ada dokumen operasional yang ditautkan langsung.</p>}
             <h3>Jejak sumber jurnal</h3>{j.sources.map(s => <p key={s.id}>{evidence(s.file)} · sheet {s.sheet} · baris {s.row}{s.reference ? ` · referensi ${s.reference}` : ""}</p>)}
             {j.sourceDocuments.map(s => <p key={s.id}>{evidence(s.file)} · sheet {s.sheet} · baris {s.row} · {s.documentNumber} · {s.match === "REFERENSI_TEPAT" ? "Nomor referensi tepat; bukti perlu diperiksa" : "Nomor berulang; perlu verifikasi"}</p>)}
+            <h3>Register bukti transaksi</h3>{j.evidenceRegister.map(b => <p key={b.id}>BUKTI no. {b.row} · {b.type} · {b.document || "–"} · {b.date} · {b.party || "–"}{b.amount ? ` · ${rupiah(b.amount)}` : ""} · rujukan {b.pointer} · pemeriksaan: {b.review} · kelengkapan: {b.completeness}</p>)}
+            {!j.evidenceRegister.length && <p>Belum ada baris register bukti (sheet BUKTI) yang tertaut ke jurnal ini.</p>}
             {j.attachment && <p><a href={`/api/files?id=${encodeURIComponent(j.attachment.id)}`}>Unduh {j.attachment.name}</a></p>}
             {j.evidenceUrls.map((url, i) => <p key={url}><a href={url} target="_blank" rel="noopener noreferrer">Rujukan bukti pada uraian {i + 1} <ExternalLink size={12} /></a></p>)}
             {j.sourceNote && <p className="note">{j.sourceNote}</p>}

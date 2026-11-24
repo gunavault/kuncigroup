@@ -37,6 +37,7 @@ import {
   ChartNoAxesCombined,
   ClipboardList,
   X,
+  Landmark,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { rupiah, amount, cents } from "@/lib/money";
@@ -45,6 +46,7 @@ import { ModuleMiniDashboard } from "./module-mini-dashboard";
 import { ManagementReportView } from "./management-report-view";
 import { FinancialTrace, type TraceSelection } from "./financial-trace";
 import { FinancialRatios } from "./financial-ratios";
+import { BankReconciliationView } from "./bank-reconciliation-view";
 import type { snapshot } from "@/lib/accounting";
 type Data = Awaited<ReturnType<typeof snapshot>>;
 type Wire<T> = T extends Date
@@ -67,6 +69,7 @@ const nav = [
   ["Laporan keuangan", ChartNoAxesCombined],
   ["Tutup buku", LockKeyhole],
   ["Laporan manajemen", ClipboardList],
+  ["Rekonsiliasi bank", Landmark],
 ] as const;
 const date = (v: string) =>
   new Date(v).toLocaleDateString("id-ID", {
@@ -1183,6 +1186,9 @@ export default function Workspace() {
                   </div>
                   <FinancialRatios company={data.company.id} period={data.period.id} onTrace={setTrace} />
                 </>
+              )}
+              {page === 9 && data && (
+                <BankReconciliationView company={data.company.id} periodId={data.period.id} onTrace={setTrace} />
               )}
               {page === 8 && data && (
                 <ManagementReportView

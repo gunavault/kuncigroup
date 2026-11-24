@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { UserManagement } from "./user-management";
 import { Settings2, MapPin, Users, ShieldCheck, KeyRound } from "lucide-react";
 import type { AppState } from "./operation-workspace";
-import { ratioMappingFields } from "@/lib/ratio-mapping";
+import { ratioMappingFields, suggestRatioMapping } from "@/lib/ratio-mapping";
 const approvalModules = [
   ["purchase", "Purchase (PR/RFQ/PO/tagihan)"],
   ["payments", "Pembayaran / pencairan"],
@@ -346,6 +346,7 @@ export function SettingsWorkspace({
                 </div>
                 <h3>Klasifikasi akun untuk rasio</h3>
                 <p className="muted">Pilih akun berdasarkan kebijakan Finance. Aset cepat harus termasuk aset lancar dan tidak memuat persediaan atau beban dibayar di muka. Kosong berarti belum dipetakan; sistem tidak menganggapnya nol.</p>
+                <p><button type="button" className="button button-outline" onClick={() => setMap(m => ({ ...m, ratios: suggestRatioMapping(accounts as unknown as Parameters<typeof suggestRatioMapping>[0]) }))}>Usulkan pemetaan otomatis dari bagan akun</button> <small className="muted">Mengisi pilihan dari kode dan nama akun (111–113 lancar, 21x liabilitas lancar, kas & piutang sebagai aset cepat, akun pinjaman/pembiayaan berbunga, persediaan, piutang usaha, pendapatan 4xxxx, beban bunga). Tinjau lalu simpan.</small></p>
                 <div className="form-grid">{ratioMappingFields.map(field => {
                   const ratios = (map.ratios ?? {}) as Record<string, string[]>;
                   return <label key={field.key}>{field.label}<select multiple size={5} aria-label={`Rasio: ${field.label}`} value={ratios[field.key] ?? []} onChange={e => {

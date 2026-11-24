@@ -103,6 +103,15 @@ export async function financialTrace(actor: Actor, request: TraceRequest) {
     ]);
     const referenceNumbers = [...new Set(facts.map(f => str(object(f.data)["4"])).filter(Boolean))];
     const sourceDocuments = referenceNumbers.length ? await tx.sourceFact.findMany({ where: { companyId: company.id, kind: "FINANCIAL_SOURCE", documentNumber: { in: referenceNumbers } }, select: { id: true, sourceFileId: true, sheet: true, row: true, documentNumber: true, effectiveDate: true, amount: true } }) : [];
+
+    // Evidence register (sheet BUKTI of the working paper): BUKTI "TRS baris N" -> TRS row N, whose column 28 is the
+    // JURNAL row posted as this journal; BUKTI "INV baris N" -> the invoice register row linked above.
+    const journalRows = facts.filter(f => f.sheet === "JURNAL").map(f => f.row);
+    const treasury = journalRows.length ? await tx.$queryRaw<{ row: number; jrow: number; sourceFileId: string }[]>(Prisma.sql`SELECT row, (data->'cells'->>'28')::int AS jrow, "sourceFileId" FROM source_facts
+      WHERE "companyId"=${company.id} AND kind='FINANCIAL_SOURCE' AND sheet='TRS' AND data->'cells'->>'28' ~ '^[0-9]+$' AND (data->'cells'->>'28')::int IN (${Prisma.join(journalRows)})`) : [];
+    const pointers = [...treasury.map(t => `TRS baris ${t.row}`), ...sourceDocuments.filter(d => d.sheet === "INV").map(d => `INV baris ${d.row}`)];
+    const register = pointers.length ? await tx.$queryRaw<{ id: string; row: number; data: unknown; sourceFileId: string }[]>(Prisma.sql`SELECT id, row, data, "sourceFileId" FROM source_facts
+      WHERE "companyId"=${company.id} AND sheet='BUKTI' AND data->'cells'->>'7' IN (${Prisma.join(pointers)}) ORDER BY row`) : [];
     const files = await tx.sourceFile.findMany({ where: { companyId: company.id, id: { in: [...new Set([...facts, ...sourceDocuments].map(f => f.sourceFileId))] } }, select: { id: true, name: true, url: true } });
     const sourceFile = (id: string) => { const f = files.find(x => x.id === id); return f ? { ...f, url: safeEvidenceUrl(f.url) } : null; };
     const journals = selected.map(e => {
@@ -122,6 +131,10 @@ export async function financialTrace(actor: Actor, request: TraceRequest) {
         ] : [],
         attachment: e.attachment?.companyId === company.id ? { id: e.attachment.id, name: e.attachment.name } : null,
         sources: linked.map(f => ({ id: f.id, sheet: f.sheet, row: f.row, reference: str(object(f.data)["4"]), debit: f.debit?.toString() ?? null, credit: f.credit?.toString() ?? null, file: sourceFile(f.sourceFileId) })),
+        evidenceRegister: register.filter(b => {
+          const ptr = str(object(object(b.data).cells)["7"]);
+          return treasury.some(t => ptr === `TRS baris ${t.row}` && linked.some(f => f.sheet === "JURNAL" && f.row === t.jrow)) || sourceRefs.some(d => ptr === `INV baris ${d.row}` && d.sheet === "INV");
+        }).map(b => { const c = object(object(b.data).cells); return { id: b.id, row: b.row, type: str(c["2"]), document: str(c["3"]), date: str(c["4"]).slice(0, 10), party: str(c["5"]), amount: c["6"] === undefined ? null : String(c["6"]), pointer: str(c["7"]), review: str(c["13"]) || "Belum diperiksa", completeness: str(c["15"]) || "Belum diperiksa", file: sourceFile(b.sourceFileId) }; }),
         sourceDocuments: sourceRefs.map(f => ({ ...f, amount: f.amount?.toString() ?? null, effectiveDate: f.effectiveDate?.toISOString().slice(0, 10) ?? null, file: sourceFile(f.sourceFileId), match: sourceRefs.filter(x => x.documentNumber === f.documentNumber).length === 1 ? "REFERENSI_TEPAT" : "NOMOR_SAMA_PERLU_VERIFIKASI" })),
         documents: documents.filter(d => d.journalId === e.id).map(dtoDocument),
         evidenceUrls: [...new Set((e.description.match(/https:\/\/[^\s<>"']+/g) ?? []).map(safeEvidenceUrl).filter((v): v is string => Boolean(v)))],

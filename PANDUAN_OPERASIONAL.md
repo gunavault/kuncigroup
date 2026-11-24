@@ -154,3 +154,30 @@ Jejak navigasi di bagian atas dipakai untuk naik kembali. Dari detail jurnal, to
 | Setujui baris impor | Tolak baris impor | Pengelola | Alasan wajib |
 
 Sign-off dan UAT bisnis tetap harus dilakukan pengguna Finance dan Direksi yang berwenang.
+
+## Rekonsiliasi bank, pemetaan rasio otomatis dan register bukti (v8)
+
+**Rekonsiliasi bank.** *Accounting → Rekonsiliasi bank* menampilkan:
+
+1. cakupan: setiap akun kas/bank bersaldo dan jumlah baris rekening koran yang sudah diimpor;
+2. per bulan: mutasi masuk/keluar dan saldo menurut koran dan buku, selisih buku − koran, serta jumlah baris cocok / hanya di koran / hanya di buku;
+3. daftar item belum cocok. *Hanya di koran* berarti transaksi bank belum dibukukan (atau dibukukan ke akun bank lain). *Hanya di buku* berarti jurnal tidak terlihat di rekening tersebut; nomor jurnalnya dapat diklik untuk penelusuran sampai bukti.
+
+Baris dianggap cocok bila arah dan nominal sama persis dan tanggal berselisih paling lama 3 hari. Sistem tidak membuat jurnal otomatis; Finance membukukan koreksi sebagai jurnal penyesuaian. Bila saldo awal suatu bulan pada workbook koran berbeda dengan saldo akhir bulan sebelumnya, atau judul sheet tidak sesuai isinya, peringatan ditampilkan dan saldo koran dihitung dari mutasi — cocokkan dengan PDF dari bank.
+
+Rekening koran diimpor dari workbook Finance *Jurnal rekening koran* di Google Drive dengan `scripts/import-bank-statement.ts` (dry-run bawaan; `--apply` untuk menyimpan). Setiap baris diperiksa terhadap saldo berjalan yang tercetak.
+
+**Syarat finalisasi baru:** *Rekening bank direkonsiliasi ke rekening koran s.d. akhir periode*. Setiap rekening bank bersaldo harus memiliki koran sampai bulan terakhir periode dan saldo buku harus sama dengan saldo koran.
+
+**Pemetaan rasio otomatis.** Di *Pengaturan → Klasifikasi akun untuk rasio*, tombol *Usulkan pemetaan otomatis dari bagan akun* mengisi pilihan dari kode dan nama akun:
+- aset lancar 111–113 (tanpa pajak tangguhan);
+- liabilitas lancar 21x;
+- aset cepat: kas dan piutang;
+- pinjaman berbunga: akun pinjaman/pembiayaan;
+- persediaan, piutang usaha;
+- pendapatan 4xxxx tanpa retur;
+- beban bunga.
+
+Tinjau, ubah bila perlu, lalu simpan. Script `scripts/apply-ratio-mapping.ts` menerapkan usulan yang sama dan tidak menimpa pemetaan Finance tanpa `--replace`.
+
+**Register bukti transaksi.** Detail jurnal pada penelusuran kini menampilkan baris register bukti (sheet BUKTI kertas kerja) yang tertaut melalui baris treasury (TRS) atau register invoice (INV), beserta status pemeriksaan dan kelengkapannya.

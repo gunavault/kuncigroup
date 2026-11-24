@@ -18,6 +18,7 @@ import {
 import { operationSnapshot } from "@/lib/operations/read";
 import { moduleMiniDashboard } from "@/lib/operations/mini-dashboard";
 import { managementReport } from "@/lib/management-report";
+import { bankReconciliation } from "@/lib/bank-reconciliation";
 import { finalizationStatus, updateFinalization, finalizationPermissions } from "@/lib/finalization";
 import {
   saveRecord,
@@ -53,6 +54,8 @@ export async function GET(req: Request) {
         throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
       return NextResponse.json({ ...await finalizationStatus(companyId, p.get("period") ?? ""), permissions: finalizationPermissions(actor, companyId) }, { headers: { "Cache-Control": "no-store" } });
     }
+    if (p.get("view") === "bank-reconciliation")
+      return NextResponse.json(await bankReconciliation(actor, companyId, p.get("period") ?? "", p.get("account") || undefined), { headers: { "Cache-Control": "no-store" } });
     if (p.get("view") === "management-report") {
       authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
       if (allowedBranches(actor, companyId).length)

@@ -143,7 +143,7 @@ npm.cmd run build        # prisma generate + next build
 ## `scripts/` — read before running anything
 
 - **Maintained:**
-  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`, `enrich-master-v5.ts` (dry-run by default; `--apply` writes proven values only), `post-working-paper-kba-2026.ts` (dry-run by default; refuses to run twice).
+  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`, `enrich-master-v5.ts` (dry-run by default; `--apply` writes proven values only), `post-working-paper-kba-2026.ts` (dry-run by default; refuses to run twice), `import-bank-statement.ts` (bank statement workbook → BANK_STATEMENT facts; dry-run by default), `apply-ratio-mapping.ts` (automatic ratio account mapping; dry-run by default, keeps a Finance mapping unless `--replace`).
   - Report, verify and QA scripts: `report-import.ts`, `verify-*.ts`, `qa-*.{ts,mjs}`.
   - Smoke scripts (`smoke-*.ts`): they read the `SMOKE_URL` / `APP_PASSWORD` env vars.
 - **One-off patchers — DO NOT RUN.** These files string-replace code in `src/`, `prisma/schema.prisma` or `tests/`. They were already applied and re-running them corrupts code:

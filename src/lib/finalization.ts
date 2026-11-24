@@ -1,3 +1,4 @@
+import { bankBalanceCheck } from "./bank-reconciliation";
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { reports } from "./accounting";
@@ -63,11 +64,13 @@ export async function finalizationStatus(companyId: string, periodId: string, tx
   const signoffs = (store.signoffs ?? []).filter(s => s.ledgerFingerprint === ledgerFingerprint);
   const staleSignoffs = (store.signoffs ?? []).length - signoffs.length;
   const finance = signoffs.find((s) => s.role === "FINANCE"), director = signoffs.find((s) => s.role === "DIRECTOR");
+  const bank = applies ? await bankBalanceCheck(tx, companyId, period.endDate, r.rows) : { ok: true, detail: "Tidak berlaku" };
   const checks = [
     { key: "balanced", label: "Neraca saldo, neraca dan arus kas seimbang", ok: r.trialDebit === r.trialCredit && signedCents(r.balanceDifference) === 0n && signedCents(r.cash.difference) === 0n, detail: `Selisih neraca ${r.balanceDifference}; selisih arus kas ${r.cash.difference}` },
     { key: "drafts", label: "Tidak ada jurnal draft", ok: drafts === 0, detail: `${drafts} draft` },
     { key: "estimates", label: "Akun estimasi sudah diganti angka aktual (saldo nol)", ok: estimates.length === 0, detail: estimates.map((e) => `${e.code} ${e.balance}`).join("; ") || "Nihil" },
     { key: "suspense", label: "Akun penampung sudah direklasifikasi (saldo nol)", ok: suspense.length === 0, detail: suspense.map((e) => `${e.code} ${e.balance}`).join("; ") || "Nihil" },
+    { key: "bank", label: "Rekening bank direkonsiliasi ke rekening koran s.d. akhir periode", ok: bank.ok, detail: bank.detail },
     { key: "findings", label: "Temuan tingkat T selesai atau risikonya diterima Direksi", ok: openHigh.length === 0, detail: openHigh.length ? `${openHigh.length} terbuka: ${openHigh.map((f) => f.code).join(", ")}` : "Selesai" },
     { key: "finance", label: "Sign-off Finance", ok: Boolean(finance), detail: finance ? `${finance.name}, ${finance.at.slice(0, 10)}` : "Belum" },
     { key: "director", label: "Persetujuan Direksi (orang berbeda dari Finance)", ok: Boolean(director), detail: director ? `${director.name}, ${director.at.slice(0, 10)}` : "Belum" },
