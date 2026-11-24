@@ -109,3 +109,32 @@ Aturan:
 - Perjanjian pinjaman/gadai/investor (T05) dan identitas penerima (T06): **tidak ditemukan**.
 
 Laporan tidak dinyatakan final oleh sistem atau agen. Status FINAL hanya muncul setelah bukti di atas dibukukan dan dua pejabat yang berwenang menandatanganinya di aplikasi.
+
+## 8. Penelusuran bukti dan koreksi (24 November 2026)
+
+**Hasil penelusuran Google Drive (Docs, Sheets, Slides, PDF):**
+- **Google Slides:** tidak ada dokumen keuangan KBA.
+- **Rekap payroll bruto 2026:** tidak ditemukan.
+  - Folder "Rekap Excel Gaji" kosong.
+  - "Perhitungan Upah" 2026 hanya ada untuk KLH Bonas Januari–Februari.
+  - Bukti transfer gaji neto hanya Januari–Juni.
+- **SPT Masa PPh 21 dan iuran BPJS KBA 2026:** tidak ditemukan. Hal ini sejalan dengan temuan T25 dan T27 (PPh 21 tidak dipotong, iuran BPJS tidak ada di treasury). Kewajiban itu harus dihitung dan disetor lebih dahulu; dokumennya belum ada untuk dicari.
+- **PPh badan:** SPT Tahunan 2025 ada (relevan untuk T14). PPh badan 2026 tetap estimasi sampai tahun buku berakhir.
+- **Pinjaman (T05):** tiga tanda terima pinjaman **masuk** Mei 2026 dengan bukti mutasi bank, dari sister company, Direksi, dan satu pihak ketiga ke rekening payroll. Ketiganya **tidak tercatat** di kertas kerja.
+- **Rekening koran 2026:**
+  - Mandiri operasional dan BCA: Januari–September/Oktober.
+  - Mandiri Giro: Februari–September.
+  - Jurnal rekening koran Mandiri 2026 tersedia.
+  - Rekening payroll Mandiri belum ada di COA dan belum direkonsiliasi.
+
+**Koreksi yang diposting** (jurnal penyesuaian `KOR-2026-05-01` dan `KOR-2026-05-02`, melalui API aplikasi, di lokal dan produksi):
+- Penerimaan pinjaman sister company dan pinjaman Direksi ke rekening Mandiri operasional/BCA. Lawan akunnya utang afiliasi dan utang pemegang saham/direksi.
+- Arus kas pendanaan. Setiap jurnal mencantumkan bukti dokumennya.
+- Setelah koreksi, neraca saldo, neraca dan arus kas tetap seimbang di lokal dan produksi.
+- Definisi koreksi beserta nominalnya disimpan di `data/corrections-v7.json`, tidak di repositori publik. Skripnya `scripts/post-corrections-v7.mjs`: dry-run secara default dan idempoten.
+
+**Belum dikoreksi, dan alasannya:**
+- **Pinjaman pihak ketiga ke rekening payroll.** Rekening payroll belum ada di COA. Mencatat penerimaan tanpa pengeluaran gajinya akan menggelembungkan kas. Harus dilakukan bersama rekonsiliasi rekening payroll.
+- **Estimasi tenaga kerja (T01/T26).** Membutuhkan rekap bruto Januari–Oktober serta perhitungan PPh 21 dan BPJS yang belum ada.
+- **Akun penampung (T05/T06).** Pembayaran pinjaman/gadai/investor dan penerima tidak teridentifikasi membutuhkan perjanjian dan identitas penerima dari Direksi.
+- **Status FINAL.** Tetap DRAFT. Sign-off Finance dan Direksi hanya dapat dilakukan oleh pejabat yang berwenang di aplikasi, bukan oleh agen.
