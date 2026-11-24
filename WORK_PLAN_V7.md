@@ -20,6 +20,6 @@ Temuan awal: source v6.2 sudah menautkan jurnal kertas kerja melalui `SourceFact
 | 4. Rasio keuangan & operasional dengan rumus, komponen dan alasan ketidaktersediaan | Selesai; rasio berbasis klasifikasi menunggu pemetaan akun oleh Finance | `src/lib/financial-ratios.ts`, Pengaturan → klasifikasi akun untuk rasio |
 | 5. Uji | typecheck lulus; 93/93 test lulus; build produksi lulus; QA UI v7 lokal 5/5 lulus | — |
 | 6. Dokumentasi | PANDUAN_OPERASIONAL.md bagian v7 | — |
-| Deploy produksi | Belum; memerlukan persetujuan eksplisit pemilik | — |
+| Deploy produksi | Selesai 24 Nov 2026 (rilis `v7-69de215`) atas persetujuan pemilik: backup pra/pasca rilis OK, migrasi diterapkan, 93/93 test di VM lulus, build lulus; PAT publik read-only `qa-ui-v7` 5/5 dan regresi `qa-ui-v6` 7/7 lulus | `/tmp/kunci-upgrade.log` di VM |
 
 Tetap di luar kewenangan sistem/agen: sign-off Finance dan Direksi, penyetoran PPh 21/BPJS, serta penetapan klasifikasi akun rasio.
