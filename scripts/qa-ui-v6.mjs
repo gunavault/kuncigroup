@@ -50,6 +50,15 @@ try {
     assert.ok((await page.getByText('Temuan kertas kerja').count()) >= 1);
     await page.screenshot({ path: 'data/ui-qa-v6/management-report.png', fullPage: true });
   });
+  await check('finalisation panel shows status, checklist and close blockers (read-only check)', async () => {
+    await page.getByRole('region', { name: 'Finalisasi laporan' }).waitFor();
+    assert.ok((await page.locator('.checklist li').count()) >= 8);
+    const f = await (await context.request.get(`${base}/api/operations?company=KBA&view=finalization&period=${erp.period.id}`)).json();
+    assert.ok(['DRAFT', 'FINAL', 'FINAL_WITH_EXCEPTIONS'].includes(f.state));
+    if (f.state === 'DRAFT') assert.ok(f.blockersForClose.length > 0, 'a draft period lists what blocks closing');
+    const m = await (await context.request.get(base + '/api/operations?company=KBA&view=management-report')).json();
+    assert.match(m.status, /DRAFT|FINAL/);
+  });
   await check('management report exports as PDF and Excel', async () => {
     const m = await (await context.request.get(base + '/api/operations?company=KBA&view=management-report')).json();
     for (const f of ['pdf', 'xlsx']) {

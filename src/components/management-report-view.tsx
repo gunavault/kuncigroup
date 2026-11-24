@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { rupiah } from "@/lib/money";
 import type { managementReport } from "@/lib/management-report";
+import { FinalizationPanel } from "./finalization-panel";
 
 type Report = Awaited<ReturnType<typeof managementReport>>;
 
@@ -45,6 +46,7 @@ export function ManagementReportView({ company, periodId }: { company: string; p
   return (
     <>
       <div className="report-toolbar">
+        <span className={`badge ${report.finalization.state === "FINAL" ? "green" : "amber"}`}>{report.status}</span>
         <span className="badge amber">{report.basis}</span>
         <div className="actions">
           <a className="button button-outline" href={link("xlsx")}>
@@ -176,6 +178,7 @@ export function ManagementReportView({ company, periodId }: { company: string; p
           </table>
         </div>
       </section>
+      <FinalizationPanel company={company} periodId={report.period.id} />
       {report.findings.length > 0 && (
         <section className="panel">
           <div className="panel-heading">

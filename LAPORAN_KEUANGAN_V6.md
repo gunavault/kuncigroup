@@ -79,3 +79,33 @@ Catatan kualitatif:
 | Rekonsiliasi | Seluruh uji pada bagian 2: cocok |
 | SIT browser lokal (`scripts/qa-ui-v6.mjs`) | 6 pemeriksaan: periode default, KPI, laporan keuangan, laporan manajemen, ekspor PDF/Excel, dashboard bulan terakhir: lulus |
 | PAT produksi (23 November 2026) | Deploy `v6-21e32e3`: 83/83 tes di VM. Uji coba posting identik dengan lokal, lalu posting 2.000 voucher; penolakan posting ulang terbukti. Sembilan angka kunci produksi sama persis dengan lokal. QA browser v6 (6) dan v4 (4), smoke v3 dan v4 terhadap URL publik: lulus |
+
+## 7. Finalisasi laporan (v6.1)
+
+Laporan periode kertas kerja berstatus **DRAFT** sampai seluruh syarat berikut terbukti dari data. Status tercetak di layar, PDF dan Excel.
+
+| Syarat | Cara memenuhi | Bukti yang dibutuhkan |
+|---|---|---|
+| Neraca saldo, neraca dan arus kas seimbang | Otomatis | Lulus |
+| Tidak ada jurnal draft | Otomatis | Lulus |
+| Akun estimasi bersaldo nol (21111, 21112) | Jurnal penyesuaian: balik estimasi, lalu bukukan payroll aktual per bulan/proyek (gaji bruto, BPJS, PPh 21) dan PPh badan aktual | Rekap payroll bruto Januari–Oktober 2026 per proyek, rekap iuran BPJS, SPT Masa PPh 21, perhitungan PPh badan |
+| Akun penampung bersaldo nol (99901–99903) | Reklasifikasi ke utang pinjaman/afiliasi/beban sesuai dokumen | Perjanjian pinjaman/gadai/investor (T05), identitas dan dasar pembayaran penerima (T06), rekonsiliasi selisih saldo awal (T03) |
+| Temuan tingkat T selesai atau risikonya diterima Direksi | Perbarui status di panel Finalisasi. Temuan T wajib disertai bukti. Penerimaan risiko hanya oleh Direksi/Administrator | Sesuai kolom "Tindakan" setiap temuan |
+| Sign-off Finance | Tombol "Sign-off Finance" setelah syarat substantif lulus | Pemeriksaan sampel voucher terhadap bukti fisik (UAT) |
+| Persetujuan Direksi | Tombol "Persetujuan Direksi", oleh orang yang berbeda dari Finance | — |
+| Periode ditutup | Tutup buku. Ditolak sampai syarat di atas lulus, kecuali ada pengecualian Direksi yang dicatat | — |
+
+Aturan:
+- Setiap perubahan temuan setelah sign-off membatalkan sign-off.
+- Laporan dengan pengecualian Direksi berstatus **FINAL DENGAN PENGECUALIAN**.
+- Semua aksi finalisasi tercatat di jejak audit.
+
+**Bukti yang ditemukan di Drive (23–24 November 2026):**
+- Bukti transfer gaji **neto** dari rekening Mandiri payroll untuk **Januari–Juni 2026**: HO, Halim, KLH, Retail, individual, dan THR Maret. GOR hanya April–Juni.
+  - Bukti ini menunjukkan kas yang dibayar, bukan beban bruto (BPJS dan PPh 21 tidak ada).
+  - **Juli–Oktober 2026 tidak ditemukan.**
+  - Bukti ini belum cukup untuk mengganti estimasi T01, tetapi berguna untuk rekonsiliasi rekening koran payroll (T02).
+- Jurnal rekening koran Mandiri **2025**. Relevan untuk T03, bukan untuk periode 2026.
+- Perjanjian pinjaman/gadai/investor (T05) dan identitas penerima (T06): **tidak ditemukan**.
+
+Laporan tidak dinyatakan final oleh sistem atau agen. Status FINAL hanya muncul setelah bukti di atas dibukukan dan dua pejabat yang berwenang menandatanganinya di aplikasi.

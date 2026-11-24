@@ -9,6 +9,7 @@ import {
   previewClosing,
   closePeriod,
 } from "@/lib/accounting";
+import { assertCloseAllowed } from "@/lib/finalization";
 import {
   requireActor,
   authorizeCompany,
@@ -149,6 +150,7 @@ export async function POST(req: Request) {
         result = await previewClosing(a.periodId);
         break;
       case "close":
+        await assertCloseAllowed(a.periodId);
         result = await closePeriod(a.periodId, actor.id);
     }
     return NextResponse.json({ result: result ?? true });

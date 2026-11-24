@@ -39,7 +39,8 @@ export async function managementPdf(r: Report) {
   const row = (label: string, value: string, strong = false) => { next(15); text(label, 42, 9, strong); const v = idr(value); page.drawText(v, { x: 553 - (strong ? bold : font).widthOfTextAtSize(v, 9), y, size: 9, font: strong ? bold : font, color: ink }); y -= 14; };
 
   text(`${r.company.name} | Laporan Manajemen`, 42, 16, true); y -= 22;
-  text(`${r.period.name} (${r.period.status}) | IDR | ${r.basis}`, 42, 9, false, muted); y -= 20;
+  text(`${r.period.name} (${r.period.status}) | IDR | ${r.basis}`, 42, 9, false, muted); y -= 16;
+  text(`STATUS LAPORAN: ${r.status}`, 42, 10, true, r.finalization.state === "FINAL" ? rgb(0.07, 0.37, 0.32) : rgb(0.62, 0.32, 0.05)); y -= 20;
   heading("Ringkasan eksekutif");
   r.narrative.forEach((n) => para(n));
   heading("Laba rugi");
@@ -73,6 +74,8 @@ export async function managementXlsx(r: Report) {
   };
   const sum = wb.addWorksheet("Ringkasan");
   sum.addRow([`${r.company.name} - Laporan Manajemen`, r.period.name, r.basis]);
+  sum.addRow([`STATUS LAPORAN: ${r.status}`]);
+  r.finalization.checks.forEach((c) => sum.addRow([`[${c.ok ? "OK" : "BELUM"}] ${c.label}: ${c.detail}`]));
   r.narrative.forEach((n) => sum.addRow([n]));
   sum.getColumn(1).width = 140;
   const pl = wb.addWorksheet("Laba rugi");

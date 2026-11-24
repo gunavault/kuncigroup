@@ -18,6 +18,7 @@ import {
 import { operationSnapshot } from "@/lib/operations/read";
 import { moduleMiniDashboard } from "@/lib/operations/mini-dashboard";
 import { managementReport } from "@/lib/management-report";
+import { finalizationStatus, updateFinalization } from "@/lib/finalization";
 import {
   saveRecord,
   saveMaster,
@@ -46,6 +47,12 @@ export async function GET(req: Request) {
       branchId: p.get('branch') || undefined, query: p.get('q') || undefined, periodId: p.get('period') || undefined,
     }), { headers: { 'Cache-Control': 'no-store' } });
     if(p.get('view')==='source-data')return NextResponse.json(await sourceData(actor,companyId,p),{headers:{'Cache-Control':'no-store'}});
+    if (p.get("view") === "finalization") {
+      authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
+      if (allowedBranches(actor, companyId).length)
+        throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
+      return NextResponse.json(await finalizationStatus(companyId, p.get("period") ?? ""), { headers: { "Cache-Control": "no-store" } });
+    }
     if (p.get("view") === "management-report") {
       authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
       if (allowedBranches(actor, companyId).length)
@@ -144,6 +151,12 @@ export async function POST(req: Request) {
     if (actor.mustChangePassword && action !== "password")
       throw new AccessError("Ganti kata sandi awal terlebih dahulu.", 428);
     let result;
+    if (action === "finalization") {
+      authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER"]);
+      if (allowedBranches(actor, companyId).length)
+        throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
+      result = await updateFinalization(actor, companyId, body.data);
+    } else
     if(action==='prepareStockOpening')result=await prepareStockOpening(actor,body.data);
     else if(action==='reviewSource')result=await reviewSource(actor,body.data);
     else if (action === "record") result = await saveRecord(actor, body.data);

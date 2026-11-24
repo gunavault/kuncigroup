@@ -3,6 +3,7 @@ import { db } from "./db";
 import { reports } from "./accounting";
 import { amount, cents, signedCents } from "./money";
 import { historicalWindow } from "./working-paper-ledger";
+import { finalizationStatus } from "./finalization";
 
 /**
  * Management report for one fiscal period. Every number comes from the posted ledger
@@ -122,6 +123,8 @@ export async function managementReport(companyId: string, periodId?: string) {
       const checksOk = checks.filter((c) => cell(c.data, "4") === "OK").length;
       const pending = await tx.businessRecord.groupBy({ by: ["module", "status"], where: { companyId, status: { in: ["IMPORTED", "DRAFT", "SUBMITTED", "APPROVED"] } }, _count: true });
       const history = historicalWindow(company.settings);
+      const final = await finalizationStatus(companyId, period.id, tx);
+      const stateLabel = { FINAL: "FINAL", FINAL_WITH_EXCEPTIONS: "FINAL DENGAN PENGECUALIAN", DRAFT: "DRAFT - BELUM FINAL" }[final.state as "FINAL" | "FINAL_WITH_EXCEPTIONS" | "DRAFT"];
 
       // Narrative, generated from the numbers above.
       const narrative: string[] = [];
@@ -146,12 +149,15 @@ export async function managementReport(companyId: string, periodId?: string) {
       if (suspenseTotal !== 0n) narrative.push(`Akun penampung masih bersaldo ${rp(suspenseTotal)} (${suspense.map((s) => s.code).join(", ")}); saldo ini menunggu identifikasi dan reklasifikasi.`);
       if (signedCents(r.balanceDifference) !== 0n) narrative.push(`Perhatian: neraca tidak seimbang sebesar ${rp(signedCents(r.balanceDifference))}.`);
       if (history) narrative.push(`Periode ${history.from} s.d. ${history.through} dibukukan dari ${history.source}. Laporan belum diaudit.`);
+      if (final.applies && final.state === "DRAFT") narrative.push(`Status laporan: DRAFT. Belum final karena: ${final.checks.filter((c) => !c.ok).map((c) => c.label.toLowerCase()).join("; ")}.`);
       if (findings.length) narrative.push(`${findings.length} temuan kertas kerja perlu ditindaklanjuti; ${findings.filter((f) => f.severity === "T").length} berstatus T (tinggi).`);
 
       return {
         company: { id: company.id, name: company.name },
         period: { id: period.id, name: period.name, status: period.status, start: period.startDate, end: period.endDate },
         periods: periods.map((p) => ({ id: p.id, name: p.name, status: p.status })),
+        status: stateLabel,
+        finalization: { state: final.state, checks: final.checks, applies: final.applies },
         basis: history ? `Buku besar; ${history.source} (belum diaudit)` : "Buku besar yang diposting",
         profitLoss: {
           revenue: amount(totals.PENDAPATAN), cogs: amount(totals.HPP), grossProfit: amount(grossProfit),

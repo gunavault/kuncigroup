@@ -1305,6 +1305,45 @@ await test("Operational ERP integration", async (t) => {
     },
   );
   await t.test(
+    "report finalisation needs evidence, director risk acceptance and two different sign-offs",
+    async () => {
+      const { finalizationStatus, updateFinalization, assertCloseAllowed } = await import("../src/lib/finalization");
+      const director = actor("director2", "DIRECTOR"), fin = actor("finance3", "FINANCE");
+      const period = await db.fiscalPeriod.create({
+        data: { companyId: "A", name: "Uji finalisasi", startDate: new Date("2031-01-01T00:00:00Z"), endDate: new Date("2031-01-31T00:00:00Z") },
+      });
+      await db.company.update({ where: { id: "A" }, data: { settings: { accounting: map, historicalLedger: { from: "2031-01-01", through: "2031-01-31", periodId: period.id, source: "Uji" } } } });
+      await db.sourceFile.upsert({ where: { id: "uji" }, update: {}, create: { id: "uji", companyId: "A", name: "Kertas kerja uji", mime: "application/vnd.ms-excel", path: "uji", url: "" } });
+      await db.dataImportBatch.upsert({ where: { id: "uji" }, update: {}, create: { id: "uji", companyId: "A", name: "Batch uji finalisasi" } });
+      for (const [i, code, sev] of [[1, "T01", "T"], [2, "T02", "S"]] as const)
+        await db.sourceFact.create({ data: { id: `fin-${code}`, companyId: "A", batchId: "uji", kind: "CONTROL", sourceKey: `uji-${code}`, sourceFileId: "uji", sheet: "TEMUAN", row: i, data: { cells: { "1": code, "2": `Temuan ${code}`, "4": sev, "7": "Finance", "8": "30-Nov-26" } } } });
+      const go = (who: Actor, data: Record<string, unknown>) => updateFinalization(who, "A", { periodId: period.id, ...data });
+      try {
+        let s = await finalizationStatus("A", period.id);
+        assert.equal(s.state, "DRAFT");
+        await assert.rejects(assertCloseAllowed(period.id), /belum dapat ditutup/);
+        await assert.rejects(go(fin, { action: "signoff", role: "FINANCE", note: "Diperiksa lengkap" }), /belum lulus/);
+        await assert.rejects(go(fin, { action: "finding", code: "T01", status: "RESOLVED", note: "Payroll aktual telah dibukukan lengkap" }), /bukti/);
+        await assert.rejects(go(fin, { action: "finding", code: "T01", status: "ACCEPTED_RISK", note: "Risiko diterima oleh Finance saja" }), /Direksi/);
+        s = await go(fin, { action: "finding", code: "T01", status: "RESOLVED", note: "Payroll aktual telah dibukukan lengkap", evidence: "JP-2031-0001" });
+        assert.equal(s.findings.find((f) => f.code === "T01")!.status, "RESOLVED");
+        assert.ok(s.readyForSignOff, "only T-level findings block sign-off");
+        await assert.rejects(go(director, { action: "signoff", role: "DIRECTOR", note: "Disetujui direksi" }), /setelah sign-off Finance/);
+        s = await go(fin, { action: "signoff", role: "FINANCE", note: "Diperiksa lengkap" });
+        await assert.rejects(go(fin, { action: "signoff", role: "DIRECTOR", note: "Disetujui sendiri" }), /Direktur|berbeda/);
+        s = await go(director, { action: "signoff", role: "DIRECTOR", note: "Disetujui direksi" });
+        await assertCloseAllowed(period.id);
+        s = await go(fin, { action: "finding", code: "T02", status: "IN_PROGRESS", note: "" });
+        assert.equal(s.signoffs.length, 0, "a change after sign-off invalidates it");
+        await assert.rejects(assertCloseAllowed(period.id));
+      } finally {
+        await db.company.update({ where: { id: "A" }, data: { settings: { accounting: map } } });
+        await db.sourceFact.deleteMany({ where: { batchId: "uji" } });
+        // Fiscal periods cannot be deleted (database invariant); the 2031 test period stays.
+      }
+    },
+  );
+  await t.test(
     "documents inside a period booked from the working paper cannot be posted twice",
     async () => {
       await db.company.update({

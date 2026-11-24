@@ -2147,3 +2147,8 @@ label {
 .narrative li { color: var(--ink, #14302d); }
 tr.total td { font-weight: 700; border-top: 1px solid rgba(18, 59, 54, 0.25); }
 .kpi small { display: block; margin-top: 4px; opacity: 0.7; }
+.checklist { list-style: none; margin: 0; padding: 4px 22px 14px; display: grid; gap: 6px; }
+.checklist li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.checklist li.ok svg { color: #178a73; }
+.checklist li.todo svg { color: #b45309; }
+.checklist li span { opacity: 0.75; font-size: 0.9em; }
