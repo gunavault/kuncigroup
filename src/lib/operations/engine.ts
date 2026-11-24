@@ -769,6 +769,12 @@ export async function transitionRecord(actor: Actor, input: unknown) {
       }
       d.approvedName = actor.name;
       status = "APPROVED";
+    } else if (action === "withdraw") {
+      if (r.status !== "SUBMITTED" || (r.actorId !== actor.id && !["ADMIN", "MANAGER", "FINANCE", "HR"].includes(role)))
+        throw new Error("Hanya pembuat atau pengelola dapat menarik pengajuan yang belum disetujui.");
+      if (str(s.reason).trim().length < 10) throw new Error("Alasan penarikan minimal 10 karakter.");
+      for (const key of workflowKeys) delete d[key];
+      status = "DRAFT";
     } else if (action === "reject") {
       if (
         !["SUBMITTED", "APPROVED"].includes(r.status) ||
@@ -822,8 +828,8 @@ export async function transitionRecord(actor: Actor, input: unknown) {
       data: {
         status,
         version: { increment: 1 },
-        ...(action === "approve" ? { approvedBy: actor.id } : {}),
-        ...(["reject", "approve", "verify"].includes(action)
+        ...(action === "approve" ? { approvedBy: actor.id } : ["reject", "withdraw"].includes(action) ? { approvedBy: null } : {}),
+        ...(["reject", "approve", "verify", "withdraw"].includes(action)
           ? { data: json(d) }
           : {}),
       },
@@ -833,7 +839,7 @@ export async function transitionRecord(actor: Actor, input: unknown) {
       tx,
       actor,
       companyId,
-      action === "verify" ? "DOCUMENT_OPS_VERIFIED" : `DOCUMENT_${status}`,
+      action === "verify" ? "DOCUMENT_OPS_VERIFIED" : action === "withdraw" ? "DOCUMENT_WITHDRAWN" : `DOCUMENT_${status}`,
       id,
       {
         number: r.number,

@@ -399,8 +399,8 @@ export default function OperationWorkspace() {
   async function transition(r: RecordData, action: string) {
     const rd = (r.data ?? {}) as Record<string, unknown>;
     let reason: string | null | undefined =
-      action === "reject" ? prompt("Alasan penolakan") : undefined;
-    if (action === "reject" && !reason) return;
+      action === "reject" ? prompt("Alasan penolakan") : action === "withdraw" ? prompt("Alasan penarikan pengajuan (minimal 10 karakter)") : undefined;
+    if (["reject", "withdraw"].includes(action) && !reason) return;
     if (
       action === "approve" &&
       r.module === "purchase" &&
@@ -1882,6 +1882,8 @@ export default function OperationWorkspace() {
               </>
             )}
             {canManage && detail.status === "APPROVED" && (
+              <>
+              <Button variant="outline" disabled={busy} onClick={() => void transition(detail, "reject")}>Tolak persetujuan</Button>
               <Button
                 disabled={
                   busy ||
@@ -1892,7 +1894,9 @@ export default function OperationWorkspace() {
               >
                 <Check size={15} /> Post / finalisasi
               </Button>
+              </>
             )}
+            {detail.status === "SUBMITTED" && (canManage || detail.actorId === state.actor.id) && <Button variant="outline" disabled={busy} onClick={() => void transition(detail, "withdraw")}>Tarik pengajuan</Button>}
             {editable &&
               ["DRAFT", "IMPORTED", "REJECTED"].includes(detail.status) && (
                 <Button

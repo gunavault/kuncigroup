@@ -2152,3 +2152,25 @@ tr.total td { font-weight: 700; border-top: 1px solid rgba(18, 59, 54, 0.25); }
 .checklist li.ok svg { color: #178a73; }
 .checklist li.todo svg { color: #b45309; }
 .checklist li span { opacity: 0.75; font-size: 0.9em; }
+.trace-link { background: transparent; border: 0; padding: 3px 0; color: #176550; cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 3px; font: inherit; }
+.trace-link:focus-visible { outline: 2px solid #176550; outline-offset: 3px; }
+.trace-link:disabled { text-decoration: none; cursor: default; color: #334155; }
+.trace-backdrop { position: fixed; inset: 0; z-index: 100; background: #0f262bb3; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.trace-dialog { width: min(1100px,100%); max-height: 94dvh; display: flex; flex-direction: column; margin: 0; overflow: hidden; }
+.trace-dialog .panel-heading { flex-shrink: 0; }
+.trace-breadcrumb { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 0 22px 12px; border-bottom: 1px solid #e1e8e6; }
+.trace-breadcrumb span { display: inline-flex; align-items: center; gap: 6px; }
+.trace-body { overflow: auto; padding: 18px 22px; min-height: 180px; overflow-wrap: anywhere; }
+.trace-body h3 { margin: 20px 0 10px; }
+.trace-body p { margin: 10px 0; line-height: 1.5; }
+.trace-body .table-scroll { margin: 12px 0; }
+.trace-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.trace-summary strong { font-size: 22px; }.trace-summary small { flex-basis: 100%; color: #64748b; }
+.trace-pagination { flex-wrap: wrap; margin: 18px 0 4px; }.trace-pagination span { font-size: 12px; }
+.ratio-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap: 14px; padding: 0 20px 20px; }
+.ratio-card { border: 1px solid #e1e8e6; border-radius: 10px; padding: 16px; min-width: 0; overflow-wrap: anywhere; }
+.ratio-card h3 { font-size: 14px; margin: 7px 0 12px; }.ratio-card>strong { font-size: 22px; color: #175b49; }
+.ratio-card>small { font-size: 11px; color: #64748b; }.ratio-card p { font-size: 12px; line-height: 1.6; margin: 12px 0; }
+.ratio-reason { color: #965200; }.ratio-card summary { color: #176550; font-size: 12px; cursor: pointer; }
+@media(max-width:600px){ .module-mini-card.money-card { grid-column: 1 / -1; }.module-mini-card.money-card strong { white-space: nowrap; font-size: clamp(16px,4.3vw,23px); } }
+@media(max-width:600px){ .trace-backdrop { padding: 6px; }.trace-dialog { max-height: 98dvh; }.trace-body { padding: 12px; }.trace-breadcrumb { padding: 0 12px 10px; font-size: 12px; } }

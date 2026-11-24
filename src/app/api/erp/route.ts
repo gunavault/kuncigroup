@@ -5,6 +5,7 @@ import {
   saveAccount,
   deleteAccount,
   postDraft,
+  concludeDraft,
   reverseJournal,
   previewClosing,
   closePeriod,
@@ -26,6 +27,8 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("account"), data: z.unknown() }),
   z.object({ action: z.literal("deleteAccount"), id: z.string() }),
   z.object({ action: z.literal("post"), id: z.string() }),
+  z.object({ action: z.literal("reject"), id: z.string(), reason: z.string().trim().min(10).max(1000) }),
+  z.object({ action: z.literal("cancel"), id: z.string(), reason: z.string().trim().min(10).max(1000) }),
   z.object({
     action: z.literal("reverse"),
     id: z.string(),
@@ -78,7 +81,7 @@ export async function GET(req: Request) {
     if (actor.mustChangePassword)
       throw new AccessError("Ganti kata sandi awal.", 428);
     return NextResponse.json(
-      await snapshot(params.get("period") ?? undefined, company),
+      { ...await snapshot(params.get("period") ?? undefined, company), actor: { id: actor.id, role: authorizeCompany(actor, company) } },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e) {
@@ -101,7 +104,7 @@ export async function POST(req: Request) {
         where: { id: String((a.data as { periodId?: string })?.periodId) },
       });
       scope = period.companyId;
-    } else if (a.action === "post") {
+    } else if (["post", "reject", "cancel"].includes(a.action) && "id" in a) {
       const entry = await db.journalEntry.findUniqueOrThrow({
         where: { id: a.id },
         include: { period: true },
@@ -142,6 +145,10 @@ export async function POST(req: Request) {
         break;
       case "post":
         result = await postDraft(a.id, actor.id);
+        break;
+      case "reject":
+      case "cancel":
+        result = await concludeDraft(actor, a.id, a.action, a.reason);
         break;
       case "reverse":
         result = await reverseJournal(a.id, a.periodId, a.date, actor.id);

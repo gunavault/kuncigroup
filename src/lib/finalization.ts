@@ -4,6 +4,8 @@ import { reports } from "./accounting";
 import { signedCents, amount } from "./money";
 import { assignedRole, type Actor } from "./auth";
 import { historicalWindow } from "./working-paper-ledger";
+import { createHash } from "node:crypto";
+import { authorizeCompany, allowedBranches, AccessError } from "./auth";
 
 /**
  * Report finalisation for periods carrying working-paper findings.
@@ -14,9 +16,13 @@ import { historicalWindow } from "./working-paper-ledger";
 export const FINDING_STATUS = ["OPEN", "IN_PROGRESS", "RESOLVED", "ACCEPTED_RISK"] as const;
 type FindingStatus = (typeof FINDING_STATUS)[number];
 type Resolution = { status: FindingStatus; note: string; evidence?: string; attachmentId?: string; by: string; name: string; at: string };
-type SignOff = { role: "FINANCE" | "DIRECTOR"; by: string; name: string; at: string; note: string };
-type Store = Record<string, { findings?: Record<string, Resolution>; signoffs?: SignOff[]; exception?: { by: string; name: string; reason: string; at: string } }>;
+type SignOff = { role: "FINANCE" | "DIRECTOR"; by: string; name: string; at: string; note: string; ledgerFingerprint?: string };
+type Store = Record<string, { findings?: Record<string, Resolution>; signoffs?: SignOff[]; decision?: { by: string; name: string; at: string; reason: string }; exception?: { by: string; name: string; reason: string; at: string } }>;
 const KEY = "_finalization";
+export function finalizationPermissions(actor: Actor, companyId: string) {
+  const role = assignedRole(actor, companyId);
+  return { actorId: actor.id, finance: actor.superuser || ["ADMIN", "FINANCE"].includes(role), director: actor.superuser || ["ADMIN", "DIRECTOR"].includes(role), admin: actor.superuser || role === "ADMIN" };
+}
 
 const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 async function load(tx: Prisma.TransactionClient, companyId: string): Promise<Store> {
@@ -53,7 +59,9 @@ export async function finalizationStatus(companyId: string, periodId: string, tx
   const suspense = nonZero((x) => x.code.startsWith("999"));
   const drafts = await tx.journalEntry.count({ where: { fiscalPeriodId: period.id, status: "DRAFT" } });
   const openHigh = findings.filter((f) => f.severity === "T" && !["RESOLVED", "ACCEPTED_RISK"].includes(f.status));
-  const signoffs = store.signoffs ?? [];
+  const ledgerFingerprint = createHash("sha256").update(JSON.stringify({ accounting: obj(company.settings).accounting, entries: r.entries.map(e => e.id).sort(), rows: r.rows.map(a => [a.id, a.code, a.name, a.category, a.net, a.isCash, a.role, a.normalBalance]) })).digest("hex");
+  const signoffs = (store.signoffs ?? []).filter(s => s.ledgerFingerprint === ledgerFingerprint);
+  const staleSignoffs = (store.signoffs ?? []).length - signoffs.length;
   const finance = signoffs.find((s) => s.role === "FINANCE"), director = signoffs.find((s) => s.role === "DIRECTOR");
   const checks = [
     { key: "balanced", label: "Neraca saldo, neraca dan arus kas seimbang", ok: r.trialDebit === r.trialCredit && signedCents(r.balanceDifference) === 0n && signedCents(r.cash.difference) === 0n, detail: `Selisih neraca ${r.balanceDifference}; selisih arus kas ${r.cash.difference}` },
@@ -76,16 +84,20 @@ export async function finalizationStatus(companyId: string, periodId: string, tx
     applies, period: { id: period.id, name: period.name, status: period.status }, state, checks,
     readyForSignOff: substantive.every((c) => c.ok) || Boolean(store.exception),
     blockersForClose: applies ? checks.filter((c) => c.key !== "closed" && !c.ok).map((c) => c.label) : [],
-    findings, signoffs, exception: store.exception ?? null,
+    findings, signoffs, staleSignoffs, ledgerFingerprint, decision: store.decision ?? null, exception: store.exception ?? null,
   };
 }
 
 export async function updateFinalization(actor: Actor, companyId: string, input: unknown) {
+  authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
+  if (allowedBranches(actor, companyId).length) throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
   const d = obj(input), action = String(d.action ?? ""), periodId = String(d.periodId ?? "");
   const role = assignedRole(actor, companyId);
   const isFinance = actor.superuser || ["ADMIN", "FINANCE"].includes(role);
   const isDirector = actor.superuser || ["ADMIN", "DIRECTOR"].includes(role);
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM companies WHERE id=${companyId} FOR UPDATE`;
+    await tx.$queryRaw`SELECT id FROM fiscal_periods WHERE id=${periodId} AND company_id=${companyId} FOR UPDATE`;
     const status = await finalizationStatus(companyId, periodId, tx);
     if (!status.applies) throw new Error("Periode ini tidak memerlukan finalisasi temuan.");
     if (status.period.status === "CLOSED") throw new Error("Periode sudah ditutup; finalisasi terkunci.");
@@ -98,7 +110,7 @@ export async function updateFinalization(actor: Actor, companyId: string, input:
       const finding = status.findings.find((f) => f.code === code);
       if (!finding) throw new Error("Kode temuan tidak dikenal.");
       if (!FINDING_STATUS.includes(next)) throw new Error("Status temuan tidak valid.");
-      if (!isFinance) throw new Error("Pembaruan temuan memerlukan Finance atau Administrator.");
+      if (next !== "ACCEPTED_RISK" && !isFinance) throw new Error("Pembaruan temuan memerlukan Finance atau Administrator.");
       if (next === "ACCEPTED_RISK" && !isDirector) throw new Error("Penerimaan risiko hanya oleh Direksi/Administrator.");
       if (["RESOLVED", "ACCEPTED_RISK"].includes(next) && note.length < 20) throw new Error("Catatan penyelesaian minimal 20 karakter.");
       const evidence = String(d.evidence ?? "").trim(), attachmentId = String(d.attachmentId ?? "").trim();
@@ -114,26 +126,48 @@ export async function updateFinalization(actor: Actor, companyId: string, input:
       if (as === "FINANCE" && !(actor.superuser || role === "FINANCE" || role === "ADMIN")) throw new Error("Sign-off Finance memerlukan peran Finance.");
       if (as === "DIRECTOR" && !isDirector) throw new Error("Persetujuan memerlukan Direktur atau Administrator.");
       if (!["FINANCE", "DIRECTOR"].includes(as)) throw new Error("Jenis sign-off tidak valid.");
-      const existing = p.signoffs ?? [];
+      const existing = status.signoffs;
       if (as === "DIRECTOR" && !existing.some((s) => s.role === "FINANCE")) throw new Error("Persetujuan Direksi dilakukan setelah sign-off Finance.");
       if (existing.some((s) => s.by === actor.id)) throw new Error("Sign-off Finance dan persetujuan Direksi harus oleh orang berbeda.");
-      p.signoffs = [...existing.filter((s) => s.role !== as), { role: as, note, ...stamp }];
+      p.signoffs = [...existing.filter((s) => s.role !== as), { role: as, note, ...stamp, ledgerFingerprint: status.ledgerFingerprint }];
+      delete p.decision;
     } else if (action === "exception") {
       if (!isDirector) throw new Error("Pengecualian hanya oleh Direksi/Administrator.");
       if (note.length < 30) throw new Error("Alasan pengecualian minimal 30 karakter.");
       p.exception = { reason: note, by: stamp.by, name: stamp.name, at: stamp.at };
       p.signoffs = [];
+    } else if (action === "withdrawSignoff") {
+      if (note.length < 10) throw new Error("Alasan penarikan minimal 10 karakter.");
+      const as = String(d.role), previous = (p.signoffs ?? []).find(s => s.role === as);
+      if (!previous) throw new Error("Sign-off tidak ditemukan.");
+      if (previous.by !== actor.id && !(actor.superuser || role === "ADMIN")) throw new AccessError("Hanya penandatangan atau Administrator dapat menarik sign-off.");
+      p.signoffs = as === "FINANCE" ? [] : (p.signoffs ?? []).filter(s => s.role !== "DIRECTOR");
+      p.decision = { ...stamp, reason: note };
+    } else if (action === "reject") {
+      if (!isDirector) throw new AccessError("Penolakan laporan memerlukan Direksi atau Administrator.");
+      const finance = status.signoffs.find(s => s.role === "FINANCE");
+      if (!finance || finance.by === actor.id) throw new Error("Penolakan dilakukan orang berbeda setelah sign-off Finance yang masih berlaku.");
+      if (note.length < 10) throw new Error("Alasan penolakan minimal 10 karakter.");
+      p.signoffs = [];
+      p.decision = { ...stamp, reason: note };
+    } else if (action === "revokeException") {
+      if (!isDirector) throw new AccessError("Pencabutan pengecualian memerlukan Direksi atau Administrator.");
+      if (!p.exception) throw new Error("Belum ada pengecualian.");
+      if (note.length < 10) throw new Error("Alasan pencabutan minimal 10 karakter.");
+      delete p.exception;
+      p.signoffs = [];
+      p.decision = { ...stamp, reason: note };
     } else throw new Error("Aksi finalisasi tidak dikenal.");
     await save(tx, companyId, store);
-    await tx.auditEvent.create({ data: { companyId, actorId: actor.id, action: `FINALIZATION_${action.toUpperCase()}`, entityId: periodId, details: { code: d.code ?? null, status: d.status ?? null, role: d.role ?? null } as Prisma.InputJsonValue } });
+    await tx.auditEvent.create({ data: { companyId, actorId: actor.id, action: `FINALIZATION_${action.toUpperCase()}`, entityId: periodId, details: { code: d.code ?? null, status: d.status ?? null, role: d.role ?? null, reason: note } as Prisma.InputJsonValue } });
     return finalizationStatus(companyId, periodId, tx);
   }, { timeout: 60000 });
 }
 
 /** Called before closing a period: refuses unless the checklist passes or an exception is recorded. */
-export async function assertCloseAllowed(periodId: string) {
-  const period = await db.fiscalPeriod.findUniqueOrThrow({ where: { id: periodId } });
-  const s = await finalizationStatus(period.companyId, periodId);
+export async function assertCloseAllowed(periodId: string, tx: Prisma.TransactionClient = db as unknown as Prisma.TransactionClient) {
+  const period = await tx.fiscalPeriod.findUniqueOrThrow({ where: { id: periodId } });
+  const s = await finalizationStatus(period.companyId, periodId, tx);
   if (!s.applies) return;
   if (s.exception && s.signoffs.some((x) => x.role === "FINANCE") && s.signoffs.some((x) => x.role === "DIRECTOR")) return;
   if (s.blockersForClose.length)

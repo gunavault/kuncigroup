@@ -4,10 +4,12 @@ import { Download, Loader2 } from "lucide-react";
 import { rupiah } from "@/lib/money";
 import type { managementReport } from "@/lib/management-report";
 import { FinalizationPanel } from "./finalization-panel";
+import type { TraceSelection } from "./financial-trace";
+import { FinancialRatios } from "./financial-ratios";
 
 type Report = Awaited<ReturnType<typeof managementReport>>;
 
-export function ManagementReportView({ company, periodId }: { company: string; periodId: string }) {
+export function ManagementReportView({ company, periodId, onTrace }: { company: string; periodId: string; onTrace: (selection: TraceSelection) => void }) {
   const [report, setReport] = useState<Report | null>(null),
     [error, setError] = useState("");
   useEffect(() => {
@@ -101,9 +103,9 @@ export function ManagementReportView({ company, periodId }: { company: string; p
                   ["Beban pajak penghasilan", p.tax],
                   ["Laba (rugi) bersih", p.netProfit, true],
                 ] as [string, string, boolean?][]
-              ).map(([k, v, strong]) => (
+              ).map(([k, v, strong], index) => (
                 <tr key={k} className={strong ? "total" : undefined}>
-                  <td>{k}</td>
+                  <td><button className="trace-link" onClick={() => onTrace({ statement: "PROFIT_LOSS", metric: ["PENDAPATAN", "HPP", "grossProfit", "BEBAN", "operatingProfit", "LAIN", "preTax", "PAJAK", "profit"][index], label: k })}>{k}</button></td>
                   <td className="num">{rupiah(v)}</td>
                 </tr>
               ))}
@@ -168,9 +170,9 @@ export function ManagementReportView({ company, periodId }: { company: string; p
                   ...report.position.suspense.map((s) => [`Penampung ${s.code} · ${s.name}`, s.balance]),
                   ...report.topExpenses.map((e) => [`${e.code} · ${e.name} (${e.group})`, e.value]),
                 ] as [string, string][]
-              ).map(([k, v]) => (
+              ).map(([k, v], index) => (
                 <tr key={k}>
-                  <td>{k}</td>
+                  <td>{index < 5 ? <button className="trace-link" onClick={() => onTrace({ statement: "CASH_FLOW", metric: ["opening", "operating", "investing", "financing", "ending"][index], label: k })}>{k}</button> : k}</td>
                   <td className="num">{rupiah(v)}</td>
                 </tr>
               ))}
@@ -178,6 +180,7 @@ export function ManagementReportView({ company, periodId }: { company: string; p
           </table>
         </div>
       </section>
+      <FinancialRatios company={company} period={report.period.id} onTrace={onTrace} />
       <FinalizationPanel company={company} periodId={report.period.id} />
       {report.findings.length > 0 && (
         <section className="panel">

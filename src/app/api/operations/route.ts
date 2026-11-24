@@ -18,7 +18,7 @@ import {
 import { operationSnapshot } from "@/lib/operations/read";
 import { moduleMiniDashboard } from "@/lib/operations/mini-dashboard";
 import { managementReport } from "@/lib/management-report";
-import { finalizationStatus, updateFinalization } from "@/lib/finalization";
+import { finalizationStatus, updateFinalization, finalizationPermissions } from "@/lib/finalization";
 import {
   saveRecord,
   saveMaster,
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
       authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
       if (allowedBranches(actor, companyId).length)
         throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
-      return NextResponse.json(await finalizationStatus(companyId, p.get("period") ?? ""), { headers: { "Cache-Control": "no-store" } });
+      return NextResponse.json({ ...await finalizationStatus(companyId, p.get("period") ?? ""), permissions: finalizationPermissions(actor, companyId) }, { headers: { "Cache-Control": "no-store" } });
     }
     if (p.get("view") === "management-report") {
       authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
@@ -155,7 +155,7 @@ export async function POST(req: Request) {
       authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER"]);
       if (allowedBranches(actor, companyId).length)
         throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
-      result = await updateFinalization(actor, companyId, body.data);
+      result = { ...await updateFinalization(actor, companyId, body.data), permissions: finalizationPermissions(actor, companyId) };
     } else
     if(action==='prepareStockOpening')result=await prepareStockOpening(actor,body.data);
     else if(action==='reviewSource')result=await reviewSource(actor,body.data);

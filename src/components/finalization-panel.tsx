@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Check, X, Loader2 } from "lucide-react";
-import type { finalizationStatus } from "@/lib/finalization";
+import type { finalizationStatus, finalizationPermissions } from "@/lib/finalization";
 
-type Status = Awaited<ReturnType<typeof finalizationStatus>>;
+type Status = Awaited<ReturnType<typeof finalizationStatus>> & { permissions: ReturnType<typeof finalizationPermissions> };
 const labels: Record<string, string> = {
   OPEN: "Terbuka",
   IN_PROGRESS: "Dalam proses",
@@ -57,6 +57,7 @@ export function FinalizationPanel({ company, periodId, onChange }: { company: st
   if (!s) return error ? <div className="alert">{error}</div> : <div className="empty"><Loader2 className="spin" size={16} /> Memuat finalisasi…</div>;
   if (!s.applies) return null;
   const locked = s.period.status === "CLOSED";
+  const permission = s.permissions;
   return (
     <section className="panel" aria-label="Finalisasi laporan">
       <div className="panel-heading">
@@ -78,6 +79,9 @@ export function FinalizationPanel({ company, periodId, onChange }: { company: st
           </li>
         ))}
       </ul>
+      {s.staleSignoffs > 0 && <p className="note">Buku besar atau klasifikasi akun berubah. {s.staleSignoffs} sign-off lama tidak lagi berlaku; lakukan tinjauan dan sign-off ulang.</p>}
+      {s.decision && <p className="note">Catatan pengembalian oleh {s.decision.name}: {s.decision.reason}</p>}
+      {s.signoffs.map(sign => <p key={sign.role} className="note">{sign.role === "FINANCE" ? "Sign-off Finance" : "Persetujuan Direksi"}: {sign.name} · {sign.at.slice(0, 10)} · {sign.note}{!locked && (permission.admin || permission.actorId === sign.by) && <button className="trace-link" disabled={busy} onClick={() => void act({ action: "withdrawSignoff", role: sign.role, note })}>Tarik sign-off (isi alasan)</button>}</p>)}
       {s.exception && (
         <p className="muted">
           Pengecualian Direksi oleh {s.exception.name} ({s.exception.at.slice(0, 10)}): {s.exception.reason}
@@ -108,10 +112,10 @@ export function FinalizationPanel({ company, periodId, onChange }: { company: st
                     : `PIC ${f.owner} · target ${f.due}`}
                 </td>
                 <td>
-                  {!locked && (
+                  {!locked && (permission.finance || permission.director) && (
                     <button
                       className="text-link"
-                      onClick={() => setEdit({ code: f.code, status: f.status === "OPEN" ? "IN_PROGRESS" : f.status, note: f.resolution?.note ?? "", evidence: f.resolution?.evidence ?? "" })}
+                      onClick={() => setEdit({ code: f.code, status: !permission.finance ? "ACCEPTED_RISK" : f.status === "OPEN" ? "IN_PROGRESS" : f.status, note: f.resolution?.note ?? "", evidence: f.resolution?.evidence ?? "" })}
                     >
                       Perbarui
                     </button>
@@ -134,7 +138,7 @@ export function FinalizationPanel({ company, periodId, onChange }: { company: st
             Status {edit.code}
             <select value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })}>
               {Object.entries(labels).map(([k, v]) => (
-                <option key={k} value={k}>
+                <option key={k} value={k} disabled={k === "ACCEPTED_RISK" ? !permission.director : !permission.finance}>
                   {v}
                 </option>
               ))}
@@ -158,22 +162,24 @@ export function FinalizationPanel({ company, periodId, onChange }: { company: st
           </div>
         </form>
       )}
-      {!locked && (
+      {!locked && (permission.finance || permission.director) && (
         <div className="form-grid">
           <label>
             Catatan sign-off / alasan pengecualian
             <textarea value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
           <div className="panel-footer">
-            <button className="button button-outline" disabled={busy || !s.readyForSignOff} onClick={() => void act({ action: "signoff", role: "FINANCE", note })}>
+            <button className="button button-outline" disabled={busy || !permission.finance || !s.readyForSignOff || s.signoffs.some(x => x.role === "FINANCE" || x.by === permission.actorId)} onClick={() => void act({ action: "signoff", role: "FINANCE", note })}>
               Sign-off Finance
             </button>
-            <button className="button button-outline" disabled={busy || !s.readyForSignOff} onClick={() => void act({ action: "signoff", role: "DIRECTOR", note })}>
+            <button className="button button-outline" disabled={busy || !permission.director || !s.readyForSignOff || !s.signoffs.some(x => x.role === "FINANCE" && x.by !== permission.actorId) || s.signoffs.some(x => x.role === "DIRECTOR")} onClick={() => void act({ action: "signoff", role: "DIRECTOR", note })}>
               Persetujuan Direksi
             </button>
-            <button className="button button-outline" disabled={busy} onClick={() => void act({ action: "exception", note })}>
+            <button className="button button-outline" disabled={busy || !permission.director} onClick={() => void act({ action: "exception", note })}>
               Catat pengecualian Direksi
             </button>
+            <button className="button button-outline" disabled={busy || !permission.director || !s.signoffs.some(x => x.role === "FINANCE" && x.by !== permission.actorId)} onClick={() => void act({ action: "reject", note })}>Tolak / kembalikan laporan</button>
+            {s.exception && <button className="button button-outline" disabled={busy || !permission.director} onClick={() => void act({ action: "revokeException", note })}>Cabut pengecualian</button>}
           </div>
         </div>
       )}

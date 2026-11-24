@@ -21,7 +21,9 @@ export async function sourceData(actor:Actor,companyId:string,p:URLSearchParams)
  const [rows,total,stats,batches]=await Promise.all([db.sourceFact.findMany({where:filtered,orderBy:[{effectiveDate:'desc'},{sheet:'asc'},{row:'asc'},{column:'asc'}],take:50,skip:page*50}),db.sourceFact.count({where:filtered}),db.sourceFact.groupBy({by:['kind','status'],where,_count:true}),['ADMIN','MANAGER','FINANCE','AUDITOR'].includes(role)&&!allowedBranches(actor,companyId).length?db.dataImportBatch.findMany({where:{companyId},orderBy:{createdAt:'desc'},take:10}):Promise.resolve([])]);
  const ids=[...new Set(rows.flatMap(r=>[r.employeeId,r.projectId,r.productId,r.assetId]).filter((s):s is string=>!!s))];
  const [masters,files]=await Promise.all([db.masterRecord.findMany({where:{id:{in:ids},companyId},select:{id:true,name:true,code:true}}),db.sourceFile.findMany({where:{id:{in:[...new Set(rows.map(r=>r.sourceFileId))]}},select:{id:true,name:true,notes:true}})]);
- return {rows,total,page,stats,batches,masters,files:files.map(f=>{let headers={};try{headers=JSON.parse(f.notes).headers??{};}catch{}return {id:f.id,name:f.name,headers};}),pageSize:50,reviewAllowed:['ADMIN','MANAGER','FINANCE','HR'].includes(role)};
+ const journalIds=rows.map(r=>str(object(object(r.data).ledger).journalId)).filter(Boolean);
+ const journalLinks=await db.journalEntry.findMany({where:{companyId,id:{in:journalIds}},select:{id:true,journalNumber:true,fiscalPeriodId:true,status:true}});
+ return {rows,total,page,stats,batches,masters,journalLinks,files:files.map(f=>{let headers={};try{headers=JSON.parse(f.notes).headers??{};}catch{}return {id:f.id,name:f.name,headers};}),pageSize:50,reviewAllowed:['ADMIN','MANAGER','FINANCE','HR'].includes(role)};
 }
 export async function reviewSource(actor:Actor,input:unknown){
  const d=object(input),companyId=str(d.companyId),{where,role}=sourceScope(actor,companyId);

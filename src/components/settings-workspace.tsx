@@ -4,6 +4,7 @@ import { Button } from "./ui/button";
 import { UserManagement } from "./user-management";
 import { Settings2, MapPin, Users, ShieldCheck, KeyRound } from "lucide-react";
 import type { AppState } from "./operation-workspace";
+import { ratioMappingFields } from "@/lib/ratio-mapping";
 const approvalModules = [
   ["purchase", "Purchase (PR/RFQ/PO/tagihan)"],
   ["payments", "Pembayaran / pencairan"],
@@ -22,7 +23,7 @@ export function SettingsWorkspace({
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [accounts, setAccounts] = useState<
-      { id: string; code: string; name: string }[]
+      { id: string; code: string; name: string; category: string }[]
     >([]),
     [map, setMap] = useState<Record<string, unknown>>(
       (state.company.settings.accounting ?? {}) as Record<string, unknown>,
@@ -343,6 +344,15 @@ export function SettingsWorkspace({
                     </label>
                   ))}
                 </div>
+                <h3>Klasifikasi akun untuk rasio</h3>
+                <p className="muted">Pilih akun berdasarkan kebijakan Finance. Aset cepat harus termasuk aset lancar dan tidak memuat persediaan atau beban dibayar di muka. Kosong berarti belum dipetakan; sistem tidak menganggapnya nol.</p>
+                <div className="form-grid">{ratioMappingFields.map(field => {
+                  const ratios = (map.ratios ?? {}) as Record<string, string[]>;
+                  return <label key={field.key}>{field.label}<select multiple size={5} aria-label={`Rasio: ${field.label}`} value={ratios[field.key] ?? []} onChange={e => {
+                    const values = Array.from(e.target.selectedOptions).map(o => o.value);
+                    setMap(m => ({ ...m, ratios: { ...((m.ratios ?? {}) as Record<string, unknown>), [field.key]: values } }));
+                  }}>{accounts.filter(a => a.category === field.category).map(a => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select><small>Gunakan Ctrl/Command untuk memilih lebih dari satu akun.</small></label>;
+                })}</div>
                 <h3>Matriks persetujuan</h3>
                 <p className="muted">
                   Batas dalam IDR (nilai dokumen termasuk pajak). Nilai ≤ batas

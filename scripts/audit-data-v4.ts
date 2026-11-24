@@ -31,7 +31,7 @@ for (const m of masters) {
   if (input.companies.find((c: Row) => c.id === m.companyId)?.isDemo) continue;
   const data = m.data ?? {}, def = masterDefinitions[m.kind];
   const code = m.kind === "EMPLOYEE" ? String(data.workId || m.code) : m.code;
-  const source = m.sourceFileId ? `${input.sources.find((s: Row) => s.id === m.sourceFileId)?.name ?? m.sourceFileId} / ${m.sourceRow ?? ""}` : "Database ERP";
+  const source = m.sourceFileId ? `${input.sources.find((s: Row) => s.id === m.sourceFileId)?.name ?? m.sourceFileId} / ${m.sourceRow ?? ""}` : Array.isArray(data.sourceReferences) && data.sourceReferences.length ? data.sourceReferences.map((r: Row) => `${input.sources.find((s: Row) => s.id === r.file)?.name ?? r.file} / ${r.sheet ?? ""}${r.row ? "!" + r.row : ""}${r.page ? " hlm. " + r.page : ""}`).join(" | ") : "Database ERP";
   const owner = ["EMPLOYEE", "DEPARTMENT", "POSITION"].includes(m.kind) ? "HR" : ["ASSET", "WAREHOUSE", "PRODUCT"].includes(m.kind) ? "Operasional / Logistik" : "Finance / Komersial";
   const missing = new Set<string>();
   function add(field: string, label: string, rule: string, priority: string, action: string) {
@@ -43,9 +43,12 @@ for (const m of masters) {
     if (data.currentRoster) {
       for (const [field, label] of [["workId", "ID karyawan"], ["departmentId", "Relasi departemen"], ["positionId", "Relasi jabatan"], ["projectId", "Relasi proyek"], ["joinedAt", "Tanggal bergabung"]]) add(field, label, "KELENGKAPAN ROSTER", field === "workId" ? "TINGGI" : "SEDANG", `Konfirmasi ${label} kepada HR. Jangan menebak dari nama atau absensi.`);
       if (m.active) add("userId", "Relasi akun pengguna", "AKTIVASI LAYANAN MANDIRI", "SEDANG", "Tetapkan atasan, peran dan cabang, lalu buat akun individual jika personel memerlukan akses.");
+      add("employmentStatus", "Status hubungan kerja", "KELENGKAPAN ROSTER", "SEDANG", "Konfirmasi status dari dokumen hubungan kerja. Tanggal kontrak dilengkapi sesuai status, bukan ditebak dari jabatan.");
     }
   }
   if (m.kind === "ASSET") {
+    add("assetScope", "Ruang lingkup HO / proyek", "PEMETAAN ASET", "SEDANG", "Konfirmasi dari register sumber atau penanggung jawab. Jangan menebak dari nama aset.");
+    add("fiscalGroup", "Kelompok fiskal bila aset disusutkan", "KEPUTUSAN FINANCE", "SEDANG", "Finance menentukan kapitalisasi dan kelompok fiskal jika objek memang disusutkan; catat alasan bila tidak berlaku.");
     for (const [field, label] of [["cost", "Harga perolehan"], ["acquiredAt", "Tanggal perolehan"], ["quantity", "Jumlah unit"], ["condition", "Kondisi"], ["custodian", "Pemegang aset"]]) add(field, label, "BUKTI REGISTER ASET", ["cost", "acquiredAt"].includes(field) ? "TINGGI" : "SEDANG", "Cocokkan register fisik, faktur dan berita acara. Kelompok aset tidak dipecah tanpa bukti.");
     if (data.identityReview) gap(masterGaps, "MASTER", m.id, m.kind, m.companyId, code, "Kode aset sumber", "KODE SEMENTARA", "TINGGI", owner, "Tetapkan identitas aset dari pemeriksaan fisik. Kode lokal bukan kode asli sumber.", source);
   }
@@ -55,7 +58,7 @@ for (const m of masters) {
   }
   if (m.kind === "PROJECT" && m.active) for (const [field, label] of [["partnerId", "Relasi pelanggan"], ["startAt", "Tanggal awal kontrak"], ["dueDate", "Tanggal akhir kontrak"], ["contractValue", "Nilai kontrak"], ["slaTarget", "Target SLA"]]) add(field, label, "PERSIAPAN KONTRAK / SLA", "SEDANG", "Lengkapi dari kontrak dan addendum yang berlaku.");
   if (m.kind === "WAREHOUSE" && m.active) add("address", "Alamat gudang", "IDENTITAS LOKASI", "SEDANG", "Konfirmasi alamat lokasi dengan penanggung jawab gudang.");
-  if (m.sourceFileId && data.sourceVerification !== "VERIFIED") gap(masterGaps, "MASTER", m.id, m.kind, m.companyId, code, "Verifikasi sumber", "STATUS IMPOR", "TINGGI", owner, "Tinjau identitas, satuan, cabang dan kolom wajib sebelum digunakan dalam transaksi.", source);
+  if ((m.sourceFileId || ["PENDING", "UNVERIFIED"].includes(data.sourceVerification)) && data.sourceVerification !== "VERIFIED") gap(masterGaps, "MASTER", m.id, m.kind, m.companyId, code, "Verifikasi sumber", "STATUS IMPOR", "TINGGI", owner, "Tinjau identitas, satuan, cabang dan kolom wajib sebelum digunakan dalam transaksi.", source);
 }
 let lineChecks = 0, lineErrors = 0, headerChecks = 0, headerErrors = 0, invalidReferences = 0, illegalPosted = 0;
 for (const r of records) {
@@ -139,6 +142,12 @@ const sourceCodes = new Set(sourceJournals.filter(f => !f.accountId).map(f => f.
 for (const code of sourceCodes) gap(sourceIssues, "SUMBER", `account:${code}`, "FINANCIAL_JOURNAL", "KBA", String(code), "Pemetaan COA", "AKUN PENAMPUNG", "TINGGI", "Finance", "Tentukan substansi dan akun tujuan dari bukti. Akun penampung sumber tidak diposting otomatis.", "Kertas kerja / JURNAL");
 for (const issue of bundle.issues ?? []) gap(sourceIssues, "SUMBER", createHash("sha256").update(JSON.stringify(issue)).digest("hex").slice(0,16), "TEMUAN_SUMBER", "KBA", String(issue.sheet ?? issue.file ?? "SUMBER"), String(issue.code ?? issue.type ?? "Temuan sumber"), "KENDALI SUMBER", "TINGGI", "HR / Finance / Operasional", String(issue.message ?? issue.description ?? issue.detail ?? "Tinjau temuan asli pada sumber."), `${issue.file ?? ""} / ${issue.sheet ?? ""}${issue.row ? "!" + issue.row : ""}`);
 const current = masters.filter(m => m.companyId === "KBA" && m.kind === "EMPLOYEE" && m.data?.currentRoster);
+for (const f of facts.filter(f => f.data?.sourceRevision && f.status !== "REVIEWED")) gap(sourceIssues, "SUMBER", f.id, f.kind, f.companyId, `${f.sheet}!${f.row}`, f.data?.issuerPending ? "Konflik penerbit invoice" : "Revisi invoice belum direkonsiliasi", "REVISI DRIVE 23-NOV-2026", "TINGGI", "Finance / Komersial", "Bandingkan versi sebelumnya, invoice, bukti potong dan bank. Review sumber tidak memposting atau mengganti jurnal historis.", `${f.sourceFileId} / ${f.sheet}!${f.row}`);
+for (const f of facts.filter(f => f.kind === "CONTROL" && f.sheet === "TEMUAN" && f.data?.cells?.["1"])) {
+  const code = String(f.data.cells["1"]), stores = (input.moduleSettings ?? []).filter((s: Row) => s.companyId === f.companyId).flatMap((s: Row) => Object.values(s.settings ?? {})) as Row[];
+  const resolved = stores.some(s => ["RESOLVED", "ACCEPTED_RISK"].includes(s.findings?.[code]?.status));
+  if (!resolved) gap(sourceIssues, "SUMBER", f.id, "TEMUAN_KERTAS_KERJA", f.companyId, code, String(f.data.cells["2"] ?? code), "FINALISASI LAPORAN", f.data.cells["4"] === "T" ? "TINGGI" : "SEDANG", String(f.data.cells["7"] ?? "Finance"), String(f.data.cells["6"] ?? "Selesaikan dengan bukti dan sign-off Finance / Direksi."), `${f.sourceFileId} / TEMUAN!${f.row}`);
+}
 const expectedIds = bundle.masters.filter((m: Row) => m.kind === "EMPLOYEE" && m.data?.currentRoster).map((m: Row) => String(m.data.workId));
 check("Roster terkini sesuai ID kerja sumber", expectedIds.length, expectedIds.filter((id: string) => !current.some(m => String(m.data.workId) === id)).length + current.filter(m => !expectedIds.includes(String(m.data.workId))).length, "Keanggotaan himpunan diperiksa dua arah; nama sama dengan ID berbeda tetap berbeda.");
 const summary = { capturedAt: input.capturedAt, auditedAt: new Date().toISOString(), companies: input.companies.filter((c: Row) => !c.isDemo).map((c: Row) => ({ code: c.code, active: c.active })), masters: masters.filter(m => m.companyId !== "DEMO").length, records: records.filter(r => r.companyId !== "DEMO").length, sourceFacts: facts.length, sourceKinds, currentRoster: current.length, activeRoster: current.filter(m => m.active).length, historicalEmployees: masters.filter(m => m.companyId === "KBA" && m.kind === "EMPLOYEE" && !m.data?.currentRoster).length, unknownAttendance: daily.filter(f => f.data?.attendanceStatus === "TIDAK_DIKETAHUI").length, unmappedAttendance: daily.filter(f => !f.employeeId).length, stockCorrect, stockIncomplete, stockDifference, sourceVouchers: vouchers.size, sourceDebit: num(sourceDebit), sourceCredit: num(sourceCredit), masterFieldsMissing: masterGaps.length, masterRecordsAffected: new Set(masterGaps.map(g => g.recordKey)).size, transactionFieldsMissing: transactionGaps.length, transactionRecordsAffected: new Set(transactionGaps.map(g => g.recordKey)).size, sourceFindings: sourceIssues.length, financial };

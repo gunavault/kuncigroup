@@ -11,6 +11,7 @@ import { audit } from "./engine";
 import { modules } from "./registry";
 import { normalizeApprovalSettings } from "./approval";
 import {manageUsers} from './users';
+import { validateRatioMapping } from "../ratio-mapping";
 export async function manageSettings(actor: Actor, input: unknown) {
   const s = object(input),
     action = str(s.action),
@@ -215,6 +216,7 @@ export async function manageSettings(actor: Actor, input: unknown) {
               d.settings.approval,
             );
           const map = object(d.settings.accounting);
+          if (map.ratios !== undefined) map.ratios = validateRatioMapping(map.ratios, await tx.account.findMany({ select: { id: true, category: true } }));
           for (const id of Object.values(map).flat())
             if (typeof id === "string")
               await tx.account.findUniqueOrThrow({ where: { id } });

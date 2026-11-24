@@ -23,7 +23,7 @@ export function ModuleMiniDashboard({ company, module, branch = "", query = "", 
   return <section className="module-mini-dashboard" data-module={module} aria-label="Ringkasan modul" aria-busy={!result && !error}>
     <div className="module-mini-heading"><span>Ringkasan modul</span><small>{result?.scope ?? (error ? "Ringkasan belum tersedia" : "Memuat ringkasan…")}</small></div>
     {error ? <div className="alert error" role="alert">{error}<button type="button" onClick={() => setRetry(n => n + 1)}>Coba lagi</button></div> : <div className="module-mini-grid">
-      {(result?.cards ?? Array.from({ length: 6 }, (_, i) => ({ key: String(i), label: "Memuat…", value: null, format: "count", detail: "" }))).map(card => <article key={card.key} className="module-mini-card" title={card.detail}>
+      {(result?.cards ?? Array.from({ length: 6 }, (_, i) => ({ key: String(i), label: "Memuat…", value: null, format: "count", detail: "" }))).map(card => <article key={card.key} className={`module-mini-card${card.format === "money" ? " money-card" : ""}`} title={card.detail}>
         <span>{card.label}</span><strong>{card.value === null ? "—" : card.format === "money" ? rupiah(card.value) : new Intl.NumberFormat("id-ID").format(Number(card.value))}</strong>
         <small>{card.value === null && result ? "Memerlukan hak akses terkait" : card.detail}</small>
       </article>)}

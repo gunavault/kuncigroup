@@ -128,3 +128,29 @@ Alur pembelian yang disarankan: **REQUEST** (Permintaan Pembelian dari lapangan;
 - **Accounting → Laporan manajemen** menyajikan laba rugi bertingkat, tren bulanan, posisi, arus kas, biaya terbesar, narasi otomatis dan temuan kertas kerja. Laporan dapat diunduh dalam PDF dan Excel.
 - Dashboard laba rugi per cabang menampilkan bulan terakhir yang sudah dibukukan bila bulan berjalan belum memiliki jurnal.
 - Rincian rekonsiliasi dan batasan ada di LAPORAN_KEUANGAN_V6.md.
+
+## Penelusuran laporan, rasio dan pasangan tombol workflow (v7)
+
+**Penelusuran (drill-down / drill-up).** Di *Accounting → Laporan keuangan*, klik pos Neraca, Laba rugi, Perubahan modal atau Arus kas. Jendela *Telusur laporan → bukti sumber* membuka:
+
+1. akun buku besar pembentuk pos beserta nilainya;
+2. jurnal pembentuk akun (25 per halaman, terbaru lebih dulu);
+3. detail jurnal: baris jurnal, baris kertas kerja (file, sheet, baris), register invoice sumber dengan nomor yang sama, dokumen operasional (invoice/PO/WO/kasbon) yang diposting ke jurnal itu, lampiran, dan tautan bukti https di uraian.
+
+Jejak navigasi di bagian atas dipakai untuk naik kembali. Dari detail jurnal, tombol *pos laporan terkait* membawa ke pos Neraca/Laba rugi/Arus kas yang dipengaruhi jurnal itu (drill-up). Nomor jurnal di *Jurnal umum* dan *Buku besar* juga dapat diklik. Relasi hanya ditampilkan bila ada tautan eksplisit; kecocokan nomor yang tidak unik diberi label *perlu verifikasi* dan tidak pernah ditebak dari nama atau nominal.
+
+**Rasio keuangan dan operasional.** Panel *Rasio keuangan & operasional* menampilkan rumus, pembilang, penyebut, dasar periode dan tautan telusur untuk setiap rasio (margin, beban usaha, liabilitas terhadap aset/ekuitas, kas, arus kas operasi, ROA/ROE, perputaran aset, rasio lancar/cepat/kas, DER berbunga, DIO, DSO, interest coverage, penyelesaian dokumen, pertanggungjawaban kasbon, kelulusan QC). Rasio tidak disetahunkan. Bila klasifikasi akun belum ditetapkan atau penyebut nol/negatif, rasio tampil *Belum tersedia* beserta alasannya — bukan nol. Klasifikasi aset/liabilitas lancar, aset cepat, pinjaman berbunga, persediaan, piutang usaha, penjualan kredit dan beban bunga ditetapkan Finance di *Pengaturan → Pemetaan rasio*. Rasio ikut diekspor bersama laporan keuangan dan laporan manajemen.
+
+**Pasangan tombol workflow.**
+
+| Tindakan | Pasangannya | Siapa | Catatan |
+|---|---|---|---|
+| Ajukan persetujuan | Tarik pengajuan | Pembuat atau pengelola | Alasan minimal 10 karakter; stempel OPS/persetujuan dihapus, dokumen kembali draft |
+| Setujui | Tolak (sebelum disetujui) dan Tolak persetujuan (setelah disetujui, sebelum posting) | Pengelola | Alasan wajib |
+| Post jurnal draft | Tolak draft / Batalkan draft | Finance/Admin; penolak ≠ pembuat; pembatalan oleh pembuat atau Admin | Draft tidak dihapus: status *Ditolak*/*Dibatalkan* dan jejak audit tersimpan |
+| Jurnal diposting | Jurnal pembalik | Finance/Admin | Jurnal posted tetap tidak dapat diedit atau dihapus |
+| Sign-off Finance / Persetujuan Direksi | Tarik sign-off; Tolak / kembalikan laporan | Penandatangan atau Admin; penolakan oleh Direksi yang berbeda dari Finance | Sign-off otomatis kedaluwarsa bila buku besar berubah setelah ditandatangani |
+| Catat pengecualian Direksi | Cabut pengecualian | Direksi/Admin | Alasan minimal 10 karakter |
+| Setujui baris impor | Tolak baris impor | Pengelola | Alasan wajib |
+
+Sign-off dan UAT bisnis tetap harus dilakukan pengguna Finance dan Direksi yang berwenang.

@@ -43,6 +43,8 @@ import { rupiah, amount, cents } from "@/lib/money";
 import { JournalForm } from "./journal-form";
 import { ModuleMiniDashboard } from "./module-mini-dashboard";
 import { ManagementReportView } from "./management-report-view";
+import { FinancialTrace, type TraceSelection } from "./financial-trace";
+import { FinancialRatios } from "./financial-ratios";
 import type { snapshot } from "@/lib/accounting";
 type Data = Awaited<ReturnType<typeof snapshot>>;
 type Wire<T> = T extends Date
@@ -54,7 +56,7 @@ type Wire<T> = T extends Date
       : T extends object
         ? { [K in keyof T]: Wire<T[K]> }
         : T;
-export type State = Wire<Data>;
+export type State = Wire<Data> & { actor?: { id: string; role: string } };
 const nav = [
   ["Dashboard", LayoutDashboard],
   ["Master data & saldo awal", Layers3],
@@ -81,6 +83,7 @@ const typeNames: Record<string, string> = {
   REVERSING: "Pembalik",
 };
 export default function Workspace() {
+  const [trace, setTrace] = useState<TraceSelection | null>(null);
   const [email, setEmail] = useState("admin@kuncigroup.cloud");
   const [data, setData] = useState<State | null>(null),
     [page, setPage] = useState(0),
@@ -130,7 +133,9 @@ export default function Workspace() {
     }
   }
   useEffect(() => {
-    void load();
+    const p = new URL(window.location.href).searchParams;
+    void load(p.get("period") ?? "");
+    if (p.get("journal")) setTrace({ statement: "JOURNAL", journal: p.get("journal")!, label: "Jurnal dari sumber" });
   }, []);
   async function act(body: unknown) {
     setBusy(true);
@@ -241,7 +246,7 @@ export default function Workspace() {
           {list.map((e) => (
             <tr key={e.id}>
               <td>
-                <strong>{e.journalNumber}</strong>
+                <button className="trace-link" onClick={() => setTrace({ statement: "JOURNAL", journal: e.id, label: e.journalNumber })}>{e.journalNumber}</button>
                 <span className="cell-sub">{e.description}</span>
               </td>
               <td>{date(String(e.transactionDate))}</td>
@@ -258,7 +263,7 @@ export default function Workspace() {
                   className={`badge ${e.status === "POSTED" ? "green" : "amber"}`}
                 >
                   <span className="dot" />
-                  {e.status === "POSTED" ? "Posted" : "Draft"}
+                  {{ POSTED: "Diposting", DRAFT: "Draft", REJECTED: "Ditolak", CANCELLED: "Dibatalkan" }[e.status]}
                 </span>
               </td>
               <td>
@@ -273,9 +278,11 @@ export default function Workspace() {
                     </a>
                   )}
                   {e.status === "DRAFT" && open && (
+                    <>
                     <button
                       title="Post jurnal"
                       className="icon-button"
+                      disabled={busy || !["ADMIN", "FINANCE"].includes(data?.actor?.role ?? "")}
                       onClick={() =>
                         void mutate(
                           { action: "post", id: e.id },
@@ -285,6 +292,11 @@ export default function Workspace() {
                     >
                       <Check size={16} />
                     </button>
+                    {(["reject", "cancel"] as const).map(action => <button key={action} className="icon-button" title={action === "reject" ? "Tolak draft" : "Batalkan draft"} disabled={busy || !["ADMIN", "FINANCE"].includes(data?.actor?.role ?? "") || (action === "reject" ? e.actorId === data?.actor?.id : e.actorId !== data?.actor?.id && data?.actor?.role !== "ADMIN")} onClick={() => {
+                      const reason = prompt(`${action === "reject" ? "Alasan penolakan" : "Alasan pembatalan"} (minimal 10 karakter)`);
+                      if (reason) void mutate({ action, id: e.id, reason }, action === "reject" ? "Draft ditolak; jejak audit disimpan." : "Draft dibatalkan; jejak audit disimpan.");
+                    }}>{action === "reject" ? <X size={16} /> : <Trash2 size={16} />}</button>)}
+                    </>
                   )}
                   {e.status === "POSTED" &&
                     ["GENERAL", "ADJUSTING"].includes(e.type) &&
@@ -1022,7 +1034,7 @@ export default function Workspace() {
                         {ledgerRows.map((v, i) => (
                           <tr key={i}>
                             <td>{date(v.entry.transactionDate)}</td>
-                            <td>{v.entry.journalNumber}</td>
+                            <td><button className="trace-link" onClick={() => setTrace({ statement: "JOURNAL", account: accountId, journal: v.entry.id, label: v.entry.journalNumber })}>{v.entry.journalNumber}</button></td>
                             <td>{v.entry.description}</td>
                             <td className="num">
                               {rupiah(String(v.line.debit))}
@@ -1121,27 +1133,30 @@ export default function Workspace() {
                   <div className="report-grid">
                     <Statement
                       title="Laporan laba rugi"
+                      kind="PROFIT_LOSS" onTrace={setTrace}
                       items={[
-                        ["Pendapatan", r!.revenue],
-                        ["Beban", r!.expense],
+                        ["Pendapatan", r!.revenue, "revenue"],
+                        ["Beban", r!.expense, "expense"],
                       ]}
-                      total={["Laba / rugi bersih", r!.profit]}
+                      total={["Laba / rugi bersih", r!.profit, "profit"]}
                     />
                     <Statement
                       title="Perubahan modal"
+                      kind="EQUITY" onTrace={setTrace}
                       items={[
-                        ["Modal sebelum laba & prive", r!.capitalBefore],
-                        ["Laba bersih", r!.profit],
-                        ["Prive (dikurangkan)", r!.drawings],
+                        ["Modal sebelum laba & prive", r!.capitalBefore, "capitalBefore"],
+                        ["Laba bersih", r!.profit, "profit"],
+                        ["Prive (dikurangkan)", r!.drawings, "drawings"],
                       ]}
-                      total={["Modal akhir", r!.equity]}
+                      total={["Modal akhir", r!.equity, "equity"]}
                     />
                     <Statement
                       title="Posisi keuangan"
+                      kind="BALANCE" onTrace={setTrace}
                       items={[
-                        ["Total aset", r!.assets],
-                        ["Kewajiban", r!.liabilities],
-                        ["Ekuitas akhir", r!.equity],
+                        ["Total aset", r!.assets, "assets"],
+                        ["Kewajiban", r!.liabilities, "liabilities"],
+                        ["Ekuitas akhir", r!.equity, "equity"],
                       ]}
                       total={[
                         "Selisih Aset − Kewajiban − Ekuitas",
@@ -1150,26 +1165,30 @@ export default function Workspace() {
                     />
                     <Statement
                       title="Arus kas"
+                      kind="CASH_FLOW" onTrace={setTrace}
                       items={[
-                        ["Saldo kas awal", r!.cash.opening],
-                        ["Operasional", r!.cash.operating],
-                        ["Investasi", r!.cash.investing],
-                        ["Pendanaan", r!.cash.financing],
+                        ["Saldo kas awal", r!.cash.opening, "opening"],
+                        ["Operasional", r!.cash.operating, "operating"],
+                        ["Investasi", r!.cash.investing, "investing"],
+                        ["Pendanaan", r!.cash.financing, "financing"],
+                        ["Kas belum terklasifikasi", r!.cash.difference, "difference"],
                       ]}
-                      total={["Saldo kas akhir", r!.cash.ending]}
+                      total={["Saldo kas akhir", r!.cash.ending, "ending"]}
                     />
                   </div>
                   <div className="note">
-                    Laporan historis memakai jurnal sebelum penutupan. Angka
+                    Klik pos laporan untuk membuka akun, jurnal, dokumen dan bukti sumber; gunakan jejak navigasi untuk naik kembali. Laporan historis memakai jurnal sebelum penutupan. Angka
                     akuntansi dihitung dalam satuan sen; tampilan dan grafik
                     memformat hasilnya.
                   </div>
+                  <FinancialRatios company={data.company.id} period={data.period.id} onTrace={setTrace} />
                 </>
               )}
               {page === 8 && data && (
                 <ManagementReportView
                   company={data.company.id}
                   periodId={periodId}
+                  onTrace={setTrace}
                 />
               )}
               {page === 7 && (
@@ -1310,6 +1329,7 @@ export default function Workspace() {
           </footer>
         </main>
       </div>
+      {trace && data && <FinancialTrace key={`${data.company.id}-${data.period.id}-${JSON.stringify(trace)}`} company={data.company.id} period={data.period.id} selection={trace} onClose={() => setTrace(null)} />}
       {journalType && data && (
         <JournalForm
           type={journalType}
@@ -1330,22 +1350,26 @@ function Statement({
   title,
   items,
   total,
+  kind,
+  onTrace,
 }: {
   title: string;
   items: string[][];
   total: string[];
+  kind: string;
+  onTrace: (selection: TraceSelection) => void;
 }) {
   return (
     <section className="panel statement">
       <h2>{title}</h2>
-      {items.map(([label, value]) => (
+      {items.map(([label, value, metric]) => (
         <div className="statement-line" key={label}>
-          <span>{label}</span>
+          <button className="trace-link" onClick={() => onTrace({ statement: kind, metric, label })}>{label}</button>
           <strong>{rupiah(value)}</strong>
         </div>
       ))}
       <div className="statement-total">
-        <span>{total[0]}</span>
+        {total[2] ? <button className="trace-link" onClick={() => onTrace({ statement: kind, metric: total[2], label: total[0] })}>{total[0]}</button> : <span>{total[0]}</span>}
         <strong>{rupiah(total[1])}</strong>
       </div>
     </section>

@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { managementReport } from "./management-report";
+import { addRatioSheet, type RatioReport } from "./ratio-export";
 
 type Report = Awaited<ReturnType<typeof managementReport>>;
 const idr = (v: string | number) =>
@@ -22,7 +23,7 @@ export function plRows(r: Report): [string, string][] {
   ];
 }
 
-export async function managementPdf(r: Report) {
+export async function managementPdf(r: Report, ratios?: RatioReport) {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   let page = pdf.addPage([595, 842]), y = 800;
@@ -59,12 +60,20 @@ export async function managementPdf(r: Report) {
     heading(`Temuan kertas kerja (${r.findings.length}); kontrol CEK ${r.controls.ok}/${r.controls.total} OK`);
     r.findings.forEach((f) => para(`${f.code} [${f.severity}] ${f.issue} | Nilai ${f.amount ? idr(f.amount) : "-"} | Tindakan: ${f.action} | PIC: ${f.owner} | Target: ${f.due}`, 8));
   }
+  if (ratios) {
+    heading("Rasio keuangan dan operasional"); para(ratios.basis);
+    for (const ratio of ratios.ratios) {
+      para(`${ratio.label}: ${ratio.value === null ? "Belum tersedia" : `${ratio.value} ${ratio.unit}`}`, 10);
+      para(`${ratio.formula} | Pembilang ${ratio.numerator} | Penyebut ${ratio.denominator}${ratio.reason ? ` | ${ratio.reason}` : ""}`, 8);
+    }
+    ratios.notes.forEach(n => para(n, 8));
+  }
   pdf.getPages().forEach((p, i) => p.drawText(`Kunci Group | Laporan manajemen | ${i + 1}/${pdf.getPageCount()}`, { x: 42, y: 28, size: 7, font, color: muted }));
   pdf.setTitle(ascii(`${r.company.name} - Laporan Manajemen ${r.period.name}`));
   return pdf.save();
 }
 
-export async function managementXlsx(r: Report) {
+export async function managementXlsx(r: Report, ratios?: RatioReport) {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Kunci Group";
   const head = (sh: ExcelJS.Worksheet) => {
@@ -95,5 +104,6 @@ export async function managementXlsx(r: Report) {
   fi.addRow(["Kode", "Temuan", "Nilai", "Tingkat", "Dasar", "Tindakan", "PIC", "Target"]);
   r.findings.forEach((f) => fi.addRow([f.code, f.issue, f.amount ? Number(f.amount) : null, f.severity, f.basis, f.action, f.owner, f.due])); head(fi);
   fi.columns.forEach((c, i) => (c.width = [1, 5].includes(i) ? 60 : 18));
+  if (ratios) addRatioSheet(wb, ratios);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

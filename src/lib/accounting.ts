@@ -10,6 +10,7 @@ import {
 import { journalSchema, accountSchema } from "./validation";
 import { object, str } from "./operations/shared";
 import { historicalWindow } from "./working-paper-ledger";
+import { authorizeCompany, allowedBranches, AccessError, type Actor } from "./auth";
 type Tx = Prisma.TransactionClient;
 const include = {
   lines: { include: { account: true } },
@@ -75,7 +76,7 @@ export async function insert(
   if (
     type === "OPENING" &&
     (await tx.journalEntry.count({
-      where: { fiscalPeriodId: pid, type: "OPENING" },
+      where: { fiscalPeriodId: pid, type: "OPENING", status: { in: ["DRAFT", "POSTED"] } },
     }))
   )
     throw new Error(
@@ -154,6 +155,23 @@ export async function createJournal(input: unknown, actorId?: string) {
     ),
   );
 }
+export async function concludeDraft(actor: Actor, id: string, action: "reject" | "cancel", reason: string) {
+  const note = reason.trim();
+  if (note.length < 10 || note.length > 1000) throw new Error("Alasan wajib 10–1.000 karakter.");
+  return atomic(async tx => {
+    const entry = await tx.journalEntry.findUniqueOrThrow({ where: { id } });
+    const role = authorizeCompany(actor, entry.companyId, ["ADMIN", "FINANCE"]);
+    if (allowedBranches(actor, entry.companyId).length) throw new AccessError("Tindakan jurnal memerlukan akses seluruh perusahaan.");
+    await openPeriod(tx, entry.fiscalPeriodId);
+    if (entry.status !== "DRAFT") throw new Error("Hanya jurnal draft yang dapat ditolak atau dibatalkan. Jurnal posted dikoreksi melalui pembalik.");
+    if (action === "reject" && entry.actorId === actor.id) throw new Error("Pembuat tidak dapat menolak draft sendiri; gunakan Batalkan.");
+    if (action === "cancel" && entry.actorId !== actor.id && role !== "ADMIN") throw new AccessError("Hanya pembuat atau Administrator dapat membatalkan draft.");
+    if (await tx.businessRecord.count({ where: { journalId: id } })) throw new Error("Gunakan workflow dokumen sumber untuk jurnal operasional.");
+    const result = await tx.journalEntry.update({ where: { id }, data: { status: action === "reject" ? "REJECTED" : "CANCELLED" } });
+    await tx.auditEvent.create({ data: { companyId: entry.companyId, actorId: actor.id, entityId: id, action: `JOURNAL_${result.status}`, details: { number: entry.journalNumber, previousStatus: entry.status, reason: note } } });
+    return result;
+  });
+}
 export async function postDraft(id: string, actorId?: string) {
   return atomic(async (tx) => {
     const e = await tx.journalEntry.findUniqueOrThrow({
@@ -161,7 +179,7 @@ export async function postDraft(id: string, actorId?: string) {
       include,
     });
     await openPeriod(tx, e.fiscalPeriodId);
-    if (e.status !== "DRAFT") throw new Error("Jurnal sudah posted.");
+    if (e.status !== "DRAFT") throw new Error("Hanya jurnal draft yang dapat diposting.");
     validateLines(
       e.lines.map((l) => ({
         ...l,
@@ -487,6 +505,7 @@ export async function previewClosing(pid: string) {
 export async function closePeriod(pid: string, actorId?: string) {
   return atomic(async (tx) => {
     const p = await openPeriod(tx, pid);
+    await (await import("./finalization")).assertCloseAllowed(pid, tx);
     if (
       await tx.journalEntry.count({
         where: { fiscalPeriodId: pid, status: "DRAFT" },
@@ -562,7 +581,7 @@ export async function closePeriod(pid: string, actorId?: string) {
       overlapping[0].startDate.getTime() === start.getTime() &&
       overlapping[0].endDate.getTime() === end.getTime() &&
       !(await tx.journalEntry.count({
-        where: { fiscalPeriodId: overlapping[0].id, type: "OPENING" },
+        where: { fiscalPeriodId: overlapping[0].id, type: "OPENING", status: { in: ["DRAFT", "POSTED"] } },
       }))
         ? overlapping[0]
         : null;
