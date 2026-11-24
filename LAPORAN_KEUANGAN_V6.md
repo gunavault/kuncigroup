@@ -138,3 +138,8 @@ Laporan tidak dinyatakan final oleh sistem atau agen. Status FINAL hanya muncul 
 - **Estimasi tenaga kerja (T01/T26).** Membutuhkan rekap bruto Januari–Oktober serta perhitungan PPh 21 dan BPJS yang belum ada.
 - **Akun penampung (T05/T06).** Pembayaran pinjaman/gadai/investor dan penerima tidak teridentifikasi membutuhkan perjanjian dan identitas penerima dari Direksi.
 - **Status FINAL.** Tetap DRAFT. Sign-off Finance dan Direksi hanya dapat dilakukan oleh pejabat yang berwenang di aplikasi, bukan oleh agen.
+
+**Deploy v6.2 (`56d066e`, 24 November 2026):**
+- 84/84 tes lulus di VM, dengan backup sebelum dan sesudah upgrade.
+- QA browser v6 (7 pemeriksaan) dan v4 (4 pemeriksaan), serta smoke v3 dan v4 terhadap URL publik: lulus.
+- Produksi menampilkan status **DRAFT - BELUM FINAL**, dengan 2 dari 8 syarat finalisasi terpenuhi. Neraca saldo, neraca dan arus kas seimbang (2.002 jurnal).
