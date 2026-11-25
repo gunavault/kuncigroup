@@ -134,12 +134,12 @@ test("automatic ratio proposals need Finance review, and bank-period coverage ne
   const company = await db.company.findUniqueOrThrow({where:{id:'A'}});
   await db.company.update({where:{id:'A'},data:{settings:{...(company.settings as Record<string, never>),accounting:{ratios:mapping}}}});
   await db.auditEvent.create({data:{companyId:'A',action:'RATIO_MAPPING_AUTO',entityId:'A',details:{mapping}}});
-  const pending = await financialRatios(finance,'A','A'); assert.equal(pending.mappingPending,true);assert.equal(pending.ratios.find(r=>r.key==='current')!.value,null);
+  const pending = await financialRatios(finance,'A','A'); assert.equal(pending.mappingPending,true);const provisional=pending.ratios.find(r=>r.key==='current')!;assert.notEqual(provisional.value,null,'an unreviewed proposal still shows a value');assert.equal(provisional.provisional,true,'...flagged as provisional');assert.match(provisional.reason??'',/belum ditinjau/);
   const input={companyId:'A',mapping,confirmed:true,note:'Klasifikasi diuji dalam fixture terisolasi'};
   await assert.rejects(saveRatioMapping(actor('staff','STAFF'),input));
   await assert.rejects(saveRatioMapping(finance,{...input,confirmed:false}));
   await saveRatioMapping(finance,input);
-  const reviewed=await financialRatios(finance,'A','A');assert.equal(reviewed.mappingPending,false);assert.equal(reviewed.ratios.find(r=>r.key==='current')!.value,'5.55');
+  const reviewed=await financialRatios(finance,'A','A');assert.equal(reviewed.mappingPending,false);assert.equal(reviewed.ratios.find(r=>r.key==='current')!.value,'5.55');assert.ok(!reviewed.ratios.find(r=>r.key==='current')!.provisional,'reviewed mapping is final');
   await db.sourceFact.create({data:{id:'bank-month',companyId:'A',kind:'BANK_STATEMENT_PERIOD',batchId:'batch',sourceKey:'bank-month',sourceFileId:'sourceA',sheet:'BANK',row:0,data:{month:'2032-01',opening:'0.00',closing:'0.00'}}});
   const review={companyId:'A',id:'bank-month',note:'Kelengkapan koran bulan ini diuji pada fixture',decision:'REVIEW'};
   await assert.rejects(reviewSource(actor('manager','MANAGER'),{...review,confirmCoverage:true}));
@@ -197,3 +197,50 @@ test("service reports reconcile as-of aging, source ledger cards, site allocatio
   await db.fiscalPeriod.update({where:{id:p.id},data:{status:'CLOSED'}});await assert.rejects(saveServicePlan(finance,{...plan,version:1}),/ditutup/);
 });
 after(async () => { await db.$disconnect(); await client.query(`DROP SCHEMA "${schema}" CASCADE`); await client.end(); });
+
+test("working-paper analysis: site P&L and invoice ageing reconcile to the ledger without estimates", async () => {
+  const { serviceReport } = await import('../src/lib/service-report');
+  const { sourceCents, ageSinceInvoice } = await import('../src/lib/working-paper-analysis');
+  assert.equal(sourceCents(123456789.2), 12345678920n); assert.equal(sourceCents(""), null); assert.equal(sourceCents("abc"), null);
+  assert.deepEqual(ageSinceInvoice('2035-01-01', '2035-04-15'), { days: 104, bucket: 'OVER_90' });
+  const p = await db.fiscalPeriod.create({ data: { companyId: 'A', name: 'Januari 2035', startDate: new Date('2035-01-01Z'), endDate: new Date('2035-01-31Z') } });
+  await db.account.create({ data: { id: 'piutang-wp', code: '115', name: 'Piutang Usaha uji', category: 'ASET', normalBalance: 'DEBIT' } });
+  const j = (date: string, lines: ReturnType<typeof line>[]) => createJournal({ ...base, periodId: p.id, date, lines }, finance.id);
+  const sale1 = await j('2035-01-05', [line('piutang-wp', '300', '0'), line('revenue', '0', '300')]);
+  await j('2035-01-20', [line('cash', '300', '0'), line('piutang-wp', '0', '300')]);
+  const sale2 = await j('2035-01-10', [line('piutang-wp', '200.10', '0'), line('revenue', '0', '200.10')]);
+  const cost = await j('2035-01-12', [line('cogs', '100', '0'), line('cash', '0', '100')]);
+  const office = await j('2035-01-13', [line('expense', '50', '0'), line('cash', '0', '50')]);
+  const fact = (id: string, journalId: string, code: string, site: string, debit: string, credit: string) => ({ id, companyId: 'A', kind: 'FINANCIAL_JOURNAL', batchId: 'batch', sourceKey: id, sourceFileId: 'sourceA', sheet: 'JURNAL', row: 900 + Number(id.slice(-1)), debit, credit, data: { accountCode: code, '13': site, ledger: { journalId } } });
+  const cell = (id: string, sheet: string, row: number, cells: Record<string, string | number>) => ({ id, companyId: 'A', kind: 'REFERENCE', batchId: 'batch', sourceKey: id, sourceFileId: 'sourceA', sheet, row, data: { cells } });
+  await db.sourceFact.createMany({ data: [
+    fact('wp-1', sale1.id, '400', 'Site X', '0', '300'), fact('wp-2', sale2.id, '400', 'Site Y', '0', '200.10'), fact('wp-3', cost.id, '500', 'Site X', '100', '0'), fact('wp-4', office.id, '600', 'Kantor pusat/umum', '50', '0'),
+    cell('inv-1', 'INV', 5, { 2: 'KBA/INV/X-1', 3: '2035-01-05T00:00:00.000Z', 5: 'Pelanggan X', 24: 'Site X', 12: 300, 13: '2035-01-20T00:00:00.000Z', 16: 300 }),
+    cell('inv-2', 'INV', 6, { 2: 'KBA/INV/Y-2', 3: '2035-01-10T00:00:00.000Z', 5: 'Pelanggan Y', 24: 'Site Y', 12: 200.1 }),
+    cell('inv-3', 'INV', 7, { 2: 'KBA/INV/Z-3', 3: '2035-01-11T00:00:00.000Z', 5: 'Pelanggan Z', 12: 100, 13: '2035-01-12T00:00:00.000Z', 16: 99.95 }),
+    cell('inv-later', 'INV', 8, { 2: 'KBA/INV/LATER', 3: '2035-02-02T00:00:00.000Z', 12: 999 }),
+    cell('piutang-total', 'OPS_PIUTANG', 15, { 1: 'Jumlah piutang usaha', 6: 200.1 }),
+    cell('proj-open', 'PROYEKSI_KAS', 5, { 1: 'Saldo kas awal (saldo buku)', 2: 100, 3: 120, 4: 130, 6: 'NRC' }),
+  ] });
+  await db.sourceFact.create({ data: { id: 'rab-x', companyId: 'A', kind: 'BUDGET_RAB', batchId: 'batch', sourceKey: 'rab-x', sourceFileId: 'sourceA', sheet: 'RAB', row: 1, data: { site: 'Site X', category: 'CHEMICAL', label: 'Bahan', monthly: '40.00' } } });
+  const settings = (await db.company.findUniqueOrThrow({ where: { id: 'A' } })).settings as Record<string, Record<string, unknown>>;
+  await db.company.update({ where: { id: 'A' }, data: { settings: { ...settings, accounting: { ...(settings.accounting ?? {}), ratios: { ...((settings.accounting?.ratios as Record<string, unknown>) ?? {}), chemicalExpenseIds: ['cogs'] } } } as never } });
+  const r = await serviceReport(finance, 'A', p.id);
+  assert.ok(r.workingPaper.available);
+  if (!r.workingPaper.available) return;
+  const s = r.workingPaper.sites;
+  assert.equal(s.difference, '0.00', 'site P&L adds back to the ledger');
+  const x = s.rows.find(row => row.site === 'Site X')!;
+  assert.deepEqual([x.revenue, x.direct, x.profit], ['300.00', '100.00', '200.00']);
+  const office$ = s.rows.find(row => row.site === 'Kantor pusat/umum')!;
+  assert.equal(office$.overhead, true); assert.equal(office$.operating, '50.00');
+  const ar = r.workingPaper.receivables;
+  assert.deepEqual(ar.open.map(i => [i.number, i.outstanding, i.bucket]), [['KBA/INV/Y-2', '200.10', '0_30']], 'only the unpaid invoice is open; later invoices excluded');
+  assert.deepEqual(ar.settlementDifferences.map(i => [i.number, i.outstanding]), [['KBA/INV/Z-3', '0.05']], 'small receipt difference listed separately');
+  assert.equal(ar.ledger, '200.10'); assert.equal(ar.difference, '0.00'); assert.equal(ar.workingPaperTotal, '200.10');
+  const cash = r.workingPaper.cashProjection;
+  assert.deepEqual([cash.projectionOpening, cash.ledgerCash, cash.openingDifference], ['100.00', '150.00', '50.00'], 'projection opening is compared to ledger cash');
+  const budget = r.workingPaper.budgets.sites.find(b => b.site === 'Site X')!;
+  assert.equal(budget.months, 1, 'budget months = months invoiced to the site');
+  assert.deepEqual(budget.rows.map(x => [x.key, x.budget, x.actual, x.variance]), [['MATERIAL', '40.00', '100.00', '-60.00']], 'budget versus mapped actual for the same site');
+});

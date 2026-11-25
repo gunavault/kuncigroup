@@ -4,7 +4,7 @@
 import 'dotenv/config';
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 const base = process.env.UI_URL ?? 'http://127.0.0.1:3000';
 const cloud = new URL(base).protocol === 'https:';
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
@@ -18,6 +18,10 @@ try {
     const password = process.env.APP_PASSWORD || readFileSync('data/kunci-cloud-access.txt', 'utf8').match(/^Password aplikasi: (.+)$/m)?.[1].trim();
     assert.ok(password);
     const r = await context.request.post(base + '/api/session', { headers: { origin: base }, data: { email: 'admin@kuncigroup.cloud', password } });
+    assert.equal(r.status(), 200);
+  } else if (existsSync('data/qa-v7-login.json')) {
+    // Local servers with APP_PASSWORD set need a session as well.
+    const r = await context.request.post(base + '/api/session', { headers: { origin: base }, data: JSON.parse(readFileSync('data/qa-v7-login.json', 'utf8')) });
     assert.equal(r.status(), 200);
   }
   const erp = await (await context.request.get(base + '/api/erp?company=KBA')).json();

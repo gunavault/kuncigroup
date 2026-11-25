@@ -1067,10 +1067,10 @@ export default function Workspace() {
                 <section className="panel">
                   <div className="panel-heading">
                     <div>
-                      <h2>Kertas kerja terpadu</h2>
+                      <h2>Neraca saldo sebelum penyesuaian, penyesuaian dan neraca saldo setelah penyesuaian (NSSP)</h2>
                       <p>
-                        Nilai sebelum dan penyesuaian bertanda positif untuk
-                        debit, negatif untuk kredit.
+                        Kolom Sebelum = neraca saldo belum disesuaikan; Penyesuaian = jurnal penyesuaian; Debit/Kredit NSSP = dasar laporan keuangan.
+                        Nilai sebelum dan penyesuaian bertanda positif untuk debit, negatif untuk kredit.
                       </p>
                     </div>
                     <a
@@ -1235,6 +1235,15 @@ export default function Workspace() {
                       </Button>
                     </div>
                   </section>
+                  <PostClosingTrialBalance
+                    rows={rows}
+                    closingLines={
+                      plan
+                        ? plan.flatMap((g) => g.lines)
+                        : journals.filter((e) => e.type === "CLOSING" && e.status === "POSTED").flatMap((e) => e.lines.map((l) => ({ accountId: l.accountId, debit: String(l.debit), credit: String(l.credit) })))
+                    }
+                    projected={Boolean(plan)}
+                  />
                   {plan && (
                     <section className="panel">
                       <div className="panel-heading">
@@ -1383,6 +1392,44 @@ function Statement({
       <div className="statement-total">
         {total[2] ? <button className="trace-link" onClick={() => onTrace({ statement: kind, metric: total[2], label: total[0] })}>{total[0]}</button> : <span>{total[0]}</span>}
         <strong>{rupiah(total[1])}</strong>
+      </div>
+    </section>
+  );
+}
+
+/** Post-closing trial balance: adjusted balances plus closing entries; only real accounts may keep a balance. */
+function PostClosingTrialBalance({ rows, closingLines, projected }: { rows: { id: string; code: string; name: string; category: string; net: string }[]; closingLines: { accountId: string; debit: string; credit: string }[]; projected: boolean }) {
+  if (!closingLines.length) return null;
+  const signed = (v: string) => (v.startsWith("-") ? -cents(v.slice(1)) : cents(v));
+  const result = rows
+    .map((a) => {
+      const closing = closingLines.filter((l) => l.accountId === a.id).reduce((s, l) => s + cents(l.debit) - cents(l.credit), 0n);
+      return { ...a, after: signed(a.net) + closing };
+    })
+    .filter((a) => a.after !== 0n);
+  const nominal = result.filter((a) => a.category === "PENDAPATAN" || a.category === "BEBAN");
+  const debit = result.reduce((s, a) => s + (a.after > 0n ? a.after : 0n), 0n), credit = result.reduce((s, a) => s + (a.after < 0n ? -a.after : 0n), 0n);
+  return (
+    <section className="panel" aria-label="Neraca saldo penutup">
+      <div className="panel-heading">
+        <div>
+          <h2>Neraca saldo penutup {projected ? "(proyeksi setelah jurnal penutup)" : "(setelah jurnal penutup)"}</h2>
+          <p>
+            Hanya akun riil (aset, liabilitas, ekuitas) yang boleh bersaldo setelah penutupan.{" "}
+            {nominal.length ? `Perhatian: ${nominal.length} akun nominal masih bersaldo.` : "Seluruh akun nominal bersaldo nol."} Debit {rupiah(amount(debit))} · kredit {rupiah(amount(credit))}
+            {debit === credit ? " · seimbang." : " · TIDAK seimbang."}
+          </p>
+        </div>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead><tr><th>Akun</th><th className="num">Debit</th><th className="num">Kredit</th></tr></thead>
+          <tbody>
+            {result.map((a) => (
+              <tr key={a.id}><td><strong>{a.code}</strong> {a.name}</td><td className="num">{a.after > 0n ? rupiah(amount(a.after)) : ""}</td><td className="num">{a.after < 0n ? rupiah(amount(-a.after)) : ""}</td></tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );

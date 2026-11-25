@@ -9,6 +9,7 @@ import { ratioValue } from "./financial-ratios";
 import { emptyServicePlan, servicePlanKey } from "./service-plans";
 import { authorizeCompany, type Actor } from "./auth";
 import { ratioMappingHash } from "./ratio-mapping-review";
+import { workingPaperAnalysis } from "./working-paper-analysis";
 export function ageBucket(due: string, asOf: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || Number.isNaN(Date.parse(due)) || new Date(due).toISOString().slice(0, 10) !== due) return "UNKNOWN";
   const days = Math.floor((Date.parse(asOf) - Date.parse(due)) / 86400000);
@@ -43,6 +44,10 @@ export async function serviceReport(actor: Actor, companyId: string, periodId: s
     };
     const mapRows = await tx.$queryRaw<{ code: string; g: string | null }[]>(Prisma.sql`SELECT DISTINCT data->>'accountCode' AS code, data->>'16' AS g FROM source_facts WHERE "companyId"=${companyId} AND kind='FINANCIAL_JOURNAL'`);
     const groups = new Map(mapRows.filter(x => x.code && x.g).map(x => [x.code, String(x.g)]));
+    const workingPaper = await workingPaperAnalysis(tx, companyId, period, r.rows, groups, r.entries.length ? r.cash.ending : null, {
+      chemical: Array.isArray(object(object(config).ratios).chemicalExpenseIds) ? (object(object(config).ratios).chemicalExpenseIds as string[]) : [],
+      labor: Array.isArray(object(object(config).ratios).laborExpenseIds) ? (object(object(config).ratios).laborExpenseIds as string[]) : [],
+    });
     const sites = new Map<string, { revenue: bigint; direct: bigint; operating: bigint; profit: bigint }>();
     const allocatedCosts: { projectId: string; accountId: string; value: bigint }[] = [];
     const allocatableLines: { id: string; journalId: string; journal: string; account: string; value: string; date: string; description: string }[] = [];
@@ -66,9 +71,10 @@ export async function serviceReport(actor: Actor, companyId: string, periodId: s
     const siteRows = [...sites].filter(([, s]) => s.revenue || s.direct || s.operating).map(([id, s]) => ({ id, name: id === "UNALLOCATED" ? "Belum dialokasikan ke site (termasuk saldo awal)" : projects.find(p => p.id === id)!.name, revenue: amount(s.revenue), direct: amount(s.direct), operating: amount(s.operating), profit: amount(s.profit), margin: ratioValue(s.profit, s.revenue, true) }));
     const ratioConfig = object(config.ratios), review = object(config.ratioMappingReview);
     const categoryValue = (key: string, entries = r.entries) => {
-      const ids = ratioConfig[key]; if (!Array.isArray(ids) || !ids.length || review.status !== "VERIFIED" || review.hash !== ratioMappingHash(ratioConfig) || ids.some(id => !r.rows.some(a => a.id === id && a.category === "BEBAN"))) return null;
+      const ids = ratioConfig[key]; if (!Array.isArray(ids) || !ids.length || ids.some(id => !r.rows.some(a => a.id === id && a.category === "BEBAN"))) return null;
       return entries.reduce((s, e) => s + e.lines.filter(l => ids.includes(l.accountId)).reduce((t, l) => t + signedCents(l.debit) - signedCents(l.credit), 0n), 0n);
     };
+    const mappingReviewed = review.status === "VERIFIED" && review.hash === ratioMappingHash(ratioConfig);
     const labor = categoryValue("laborExpenseIds"), laborRatio = labor === null ? null : ratioValue(labor, signedCents(r.revenue), true);
     const budgets = plan.budgets.map(b => {
       const key = b.category === "LABOR" ? "laborExpenseIds" : "chemicalExpenseIds", total = categoryValue(key), ids = Array.isArray(ratioConfig[key]) ? ratioConfig[key] as string[] : [];
@@ -84,7 +90,7 @@ export async function serviceReport(actor: Actor, companyId: string, periodId: s
     const stock = await tx.stockMovement.findMany({ where: stockWhere, orderBy: [{ effectiveDate: "desc" }, { id: "asc" }], take: 100, skip: Math.max(0, Math.floor(stockPage)) * 100, select: { id: true, effectiveDate: true, recordId: true, productId: true, quantity: true, value: true } });
     const products = await tx.masterRecord.findMany({ where: { companyId, kind: "PRODUCT", id: { in: stock.map(s => s.productId) } }, select: { id: true, code: true, name: true } });
     return { company: { id: company.id, name: company.name }, period: { id: period.id, name: period.name, status: period.status, asOf }, canEdit: ["ADMIN", "FINANCE"].includes(authorizeCompany(actor, companyId)), plan, projects,
-      aging: { ar: aging("AR", str(config.receivable)), ap: aging("AP", str(config.payable)) }, sites: siteRows, labor: { cost: labor === null ? null : amount(labor), revenue: r.revenue, ratio: laborRatio, note: labor === null ? "Finance perlu memetakan dan meninjau akun biaya tenaga kerja; angka tidak ditaksir dari nama akun atau payroll neto." : "Biaya tenaga kerja berdasarkan akun eksplisit terhadap pendapatan buku besar pada periode yang sama." },
+      aging: { ar: aging("AR", str(config.receivable)), ap: aging("AP", str(config.payable)) }, workingPaper, sites: siteRows, labor: { cost: labor === null ? null : amount(labor), revenue: r.revenue, ratio: laborRatio, provisional: labor !== null && !mappingReviewed, note: labor === null ? "Finance perlu memetakan akun biaya tenaga kerja; angka tidak ditaksir dari payroll neto." : mappingReviewed ? "Biaya tenaga kerja berdasarkan akun yang ditinjau Finance terhadap pendapatan buku besar pada periode yang sama." : "SEMENTARA: akun tenaga kerja dari usulan pemetaan otomatis yang belum ditinjau Finance. Termasuk estimasi AJP-03 sampai payroll aktual dibukukan." },
       budgets, cash: { opening: r.entries.length ? r.cash.ending : null, plans: cashPlans, complete: cashPlans.length > 0 && r.entries.length > 0, note: "Skenario berbukti dari kas akhir periode. Rencana penerimaan/pengeluaran bukan transaksi dan tidak membentuk jurnal. Rencana kosong belum merupakan proyeksi kas lengkap." },
       allocatableLines, stockTotal, stockPage, stockPageSize: 100, stockMovements: stock.map(s => ({ ...s, productName: products.find(p => p.id === s.productId)?.name ?? "Produk belum dipadankan", effectiveDate: s.effectiveDate.toISOString().slice(0, 10), quantity: s.quantity.toString(), value: s.value.toString() })), sourceImports: sources.map(s => ({ module: s.module, count: s._count })),
       caveats: ["Pendapatan, beban dan saldo kontrol mengikuti jurnal POSTED sebelum penutupan. Dokumen IMPORTED tetap berada pada register sumber.", "Jurnal tanpa proyek ditempatkan pada Belum dialokasikan. Tidak ada pembagian biaya berdasarkan tebakan nama/omzet.", "Tanggal jatuh tempo yang belum terbukti masuk kelompok Belum diketahui. CaLK dan rencana tersimpan sebagai draft sampai proses tinjauan dan finalisasi bisnis selesai."] };

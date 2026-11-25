@@ -181,3 +181,31 @@ Rekening koran diimpor dari workbook Finance *Jurnal rekening koran* di Google D
 Tinjau, ubah bila perlu, lalu simpan. Script `scripts/apply-ratio-mapping.ts` menerapkan usulan yang sama dan tidak menimpa pemetaan Finance tanpa `--replace`.
 
 **Register bukti transaksi.** Detail jurnal pada penelusuran kini menampilkan baris register bukti (sheet BUKTI kertas kerja) yang tertaut melalui baris treasury (TRS) atau register invoice (INV), beserta status pemeriksaan dan kelengkapannya.
+
+## Dashboard berbasis buku besar dan siklus akuntansi jasa (v9)
+
+**Kartu dashboard.** Untuk periode yang dibukukan dari kertas kerja, kartu ringkasan memakai saldo buku besar, bukan dokumen workflow:
+
+| Kartu | Isi |
+|---|---|
+| Pendapatan buku besar | pendapatan jurnal POSTED pada periode |
+| Piutang buku besar | saldo akun kontrol piutang |
+| Saldo akun kasbon | saldo akun kontrol kasbon |
+
+Dokumen impor (invoice, kasbon) tetap tercatat sebagai register sumber dan tidak dijumlahkan ulang. Nilai nol yang ditampilkan adalah nol terbukti: misalnya akun kasbon tidak memiliki mutasi pada buku besar periode tersebut, dan register kasbon impor belum memuat data pertanggungjawaban. Lot stok tetap nol sampai saldo stok sumber diverifikasi fisik dan dinilai Finance.
+
+**Accounting → Siklus jasa & CaLK.** Setiap tab menampilkan analisis dari kertas kerja akuntan beserta rujukan sheet/baris dan rekonsiliasi ke buku besar:
+
+| Tab | Isi dari kertas kerja | Rekonsiliasi |
+|---|---|---|
+| Piutang & utang | Umur piutang per invoice (register INV; umur dari tanggal invoice karena jatuh tempo kontrak tidak tersedia), selisih pelunasan kecil dipisahkan; utang belum dibayar per kelompok umur (OPS_UTANG) | Invoice terbuka = saldo akun piutang; jumlah OPS_UTANG = saldo akun utang |
+| Profitabilitas site | Laba rugi per site menurut kolom site setiap baris jurnal; biaya kantor pusat ditampilkan sebagai biaya bersama | Jumlah site = laba rugi buku besar |
+| Biaya jasa & stok | Uji kewajaran beban tenaga kerja (UJI_PAYROLL); rasio tenaga kerja terhadap pendapatan | — |
+| Anggaran | RAB tender per site (bahan/chemical, peralatan habis pakai, sewa alat, tenaga kerja) × bulan yang ditagihkan, dibandingkan realisasi akun yang dipetakan | — |
+| Rencana kas | Proyeksi kas dan talangan gaji akuntan (PROYEKSI_KAS) | Saldo awal proyeksi dibandingkan kas buku besar |
+
+RAB diimpor dari file Drive dengan `scripts/import-rab-budget.ts` (dry-run bawaan). Data masukan bersifat privat di folder `data/`.
+
+**Rasio sementara.** Selama pemetaan akun otomatis belum ditinjau Finance, rasio yang bergantung padanya tetap dihitung dan diberi label **SEMENTARA**. Finance mengesahkannya di Pengaturan → Tinjauan pemetaan rasio.
+
+**Tutup buku.** Pratinjau jurnal penutup kini disertai *neraca saldo penutup*: saldo setelah penyesuaian ditambah jurnal penutup. Hanya akun riil yang boleh bersaldo, dan sistem menandai bila masih ada akun nominal bersaldo atau debit ≠ kredit. Pada periode yang sudah ditutup, neraca saldo penutup dihitung dari jurnal penutup yang diposting.

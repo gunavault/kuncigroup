@@ -64,7 +64,11 @@ test("automatic ratio mapping follows the chart of accounts and passes validatio
   assert.deepEqual(m.interestBearingDebtIds, ["loan"]);
   assert.deepEqual(m.inventoryIds, ["inv"]);
   assert.deepEqual(m.receivableIds, ["ar"]);
-  assert.deepEqual(m.creditSalesRevenueIds, [], "a revenue account does not prove credit sales");
+  assert.deepEqual(m.creditSalesRevenueIds, ["rev"], "contract service revenue proposed, returns excluded; Finance confirms on review");
+  assert.deepEqual(m.laborExpenseIds, [], "no labour account in this fixture");
+  const labour = suggestRatioMapping([...accounts, a("tk", "51104", "Tenaga Kerja Langsung", "BEBAN"), a("gaji", "51109", "Biaya Gaji Pegawai", "BEBAN"), a("bb", "51101", "Pembelian bahan baku", "BEBAN"), a("pph", "51122", "Biaya Pajak", "BEBAN")]);
+  assert.deepEqual(labour.laborExpenseIds.sort(), ["gaji", "tk"]);
+  assert.deepEqual(labour.chemicalExpenseIds, ["bb"]);
   assert.deepEqual(m.interestExpenseIds, ["int"]);
   assert.deepEqual(validateRatioMapping(m, accounts), m);
 });

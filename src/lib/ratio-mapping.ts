@@ -45,10 +45,11 @@ export function suggestRatioMapping(accounts: { id: string; code: string; name: 
     interestBearingDebtIds: pick((a) => a.category === "KEWAJIBAN" && /pinjaman|pembiayaan|bank|leasing|kredit/i.test(a.name)),
     inventoryIds: pick((a) => a.category === "ASET" && /persediaan/i.test(a.name)),
     receivableIds: pick((a) => a.category === "ASET" && /piutang (usaha|dagang)/i.test(a.name)),
-    creditSalesRevenueIds: [], // The account name/range does not prove that all sales are on credit.
+    // Service revenue invoiced under contracts (returns excluded); Finance confirms against the invoice register when reviewing.
+    creditSalesRevenueIds: pick((a) => a.category === "PENDAPATAN" && a.code.startsWith("4") && !/retur|potongan|tunai|cash/i.test(a.name)),
     interestExpenseIds: pick((a) => a.category === "BEBAN" && /bunga/i.test(a.name) && !/pajak/i.test(a.name)),
-    laborExpenseIds: [],
-    chemicalExpenseIds: [],
+    laborExpenseIds: pick((a) => a.category === "BEBAN" && /tenaga kerja|gaji|upah|lembur|thr|bpjs|honor|tunjangan/i.test(a.name) && !/pajak/i.test(a.name)),
+    chemicalExpenseIds: pick((a) => a.category === "BEBAN" && /bahan baku|chemical|bahan pembersih|perlengkapan kebersihan/i.test(a.name)),
   };
   return validateRatioMapping(mapping, accounts);
 }

@@ -19,3 +19,17 @@
 5. Uji unit/integrasi dan SIT, UI desktop/ponsel, filter/form/button, ekspor, RBAC dan regresi 19 modul. Bedakan simulasi UAT dari persetujuan bisnis nyata.
 6. Perbarui rekap kekosongan Excel/PPT berdasarkan snapshot cloud terbaru. Jaga data privat di luar Git publik.
 7. Push kode dan PR untuk `gunavault`, deploy pada VM existing dengan backup, PAT dan uji restore terpisah. Sinkronkan workspace lokal tanpa menimpa perubahan lain.
+
+## Status 25 November 2026 (diambil alih dan diselesaikan)
+
+Pekerjaan Codex yang belum di-commit disalin utuh ke worktree terpisah (`feat/v9-service-reporting`, commit snapshot pertama) tanpa mengubah folder kerja Codex.
+
+| Butir | Status |
+|---|---|
+| 1. Sumber kartu dashboard | Selesai: saldo buku besar untuk pendapatan, piutang dan kasbon; nol terbukti diberi dasar; register impor dan stok sumber dijelaskan |
+| 2. Bukti Drive terbaru | Kertas kerja (INV, OPS_PIUTANG, OPS_UTANG, PROYEKSI_KAS, UJI_PAYROLL, atribusi site JURNAL) dan RAB tender KLHK & Skadron 17 dipakai. RAB GOR belum: strukturnya tidak dapat diurai andal, perlu ekstraksi Finance. Workbook kasbon tidak memuat pertanggungjawaban |
+| 3. Kebutuhan kajian | Aging AR/AP terekonsiliasi; profit per site = buku besar; rasio tenaga kerja (sementara); budget vs aktual RAB; proyeksi kas talangan; CaLK & kerangka pelaporan (Codex); panduan jurnal penyesuaian (Codex); neraca saldo sebelum/sesudah penyesuaian dan neraca saldo penutup |
+| 4. Rekonsiliasi bank & tinjauan pemetaan | Kontrol v8 dipertahankan; rasio tampil SEMENTARA sampai Finance meninjau |
+| 5. Uji | typecheck; 103/103 test; build produksi; QA lokal v9 7/7, v8 4/4, v7 5/5, v6 7/7 |
+| 6. Rekap kekosongan Excel/PPT | Belum diperbarui |
+| 7. Deploy | Menunggu persetujuan pemilik |

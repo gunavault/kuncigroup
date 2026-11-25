@@ -899,14 +899,14 @@ export default function OperationWorkspace() {
                         value: state.ledgerOverview?.eligible ? state.ledgerOverview.receivable === null ? "Belum tersedia" : money(state.ledgerOverview.receivable) : money(totalValue("sales", true)),
                         icon: Receipt,
                         href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "service" })}` : undefined,
-                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.receivable} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; rincian invoice perlu direkonsiliasi` : "Saldo invoice pelanggan dalam cakupan akses",
+                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.receivable} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; aging per invoice direkonsiliasi di Siklus jasa & CaLK` : "Saldo invoice pelanggan dalam cakupan akses",
                       },
                       {
                         name: state.ledgerOverview?.eligible ? "Saldo akun kasbon" : "Kasbon dokumen terposting",
                         value: state.ledgerOverview?.eligible ? state.ledgerOverview.advance === null ? "Belum tersedia" : money(state.ledgerOverview.advance) : money(totalValue("cash-advance", true)),
                         icon: Wallet,
                         href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "ledger", account: String((state.company.settings.accounting as Record<string, unknown>)?.advance ?? "") })}` : undefined,
-                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.advance} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; sumber kasbon belum dipadankan ke akun` : "Dikurangi pertanggungjawaban & pengembalian",
+                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.advance} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; nol berarti tidak ada mutasi kasbon pada buku besar periode ini. Register kasbon impor belum memuat data pertanggungjawaban` : "Dikurangi pertanggungjawaban & pengembalian",
                       },
                       {
                         name: "Menunggu persetujuan",

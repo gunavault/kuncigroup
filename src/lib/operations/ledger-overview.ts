@@ -22,6 +22,6 @@ export async function ledgerOverview(actor: Actor, companyId: string, branchId?:
     return { ...empty, available: posted > 0, period: { id: period.id, name: period.name }, revenue: posted ? r.revenue : null,
       receivable: posted && ar ? amount(signedCents(ar.net)) : null, advance: posted && advance ? amount(signedCents(advance.net)) : null,
       journals: posted, historical: Boolean(object(company.settings).historicalLedger), accounts: { receivable: ar ? `${ar.code} ${ar.name}` : "Belum dipetakan", advance: advance ? `${advance.code} ${advance.name}` : "Belum dipetakan" },
-      basis: `${period.name} · ${posted} jurnal POSTED sebelum penutupan. Dokumen impor tidak dijumlahkan kembali. Saldo akun kontrol belum menjadi aging per invoice.` };
+      basis: `${period.name} · ${posted} jurnal POSTED sebelum penutupan. Dokumen impor tidak dijumlahkan kembali. Aging per invoice dan rekonsiliasi akun kontrol: Accounting → Siklus jasa & CaLK.` };
   }, { isolationLevel: "RepeatableRead", timeout: 60000 });
 }
