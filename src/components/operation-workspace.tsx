@@ -61,6 +61,7 @@ import {employeeModules} from "@/lib/roles";
 import {DataDetails} from "./data-details";
 import { SourceDataExplorer } from "./source-data-explorer";
 import { SettingsWorkspace } from "./settings-workspace";
+import { ModuleMiniDashboard } from "./module-mini-dashboard";
 const icons: Record<string, typeof Wallet> = {
   MessagesSquare,
   Wallet,
@@ -85,6 +86,8 @@ const icons: Record<string, typeof Wallet> = {
 export type AppState = {
   insights: {
     month: string;
+    ledgerMonth?: string;
+    ledgerBasis?: "BULAN_BERJALAN" | "BULAN_TERAKHIR_TERSEDIA";
     financial: boolean;
     branches: {
       branchId: string | null;
@@ -159,6 +162,7 @@ export type AppState = {
     _count: number;
     _sum: { amount: string | null; settled: string | null };
   }[];
+  ledgerOverview: { eligible: boolean; available: boolean; period: { id: string; name: string } | null; revenue: string | null; receivable: string | null; advance: string | null; journals: number; historical: boolean; accounts: { receivable: string; advance: string }; basis: string };
   stats: {
     module: string;
     status: string;
@@ -394,8 +398,21 @@ export default function OperationWorkspace() {
     }
   }
   async function transition(r: RecordData, action: string) {
-    const reason = action === "reject" ? prompt("Alasan penolakan") : undefined;
-    if (action === "reject" && !reason) return;
+    const rd = (r.data ?? {}) as Record<string, unknown>;
+    let reason: string | null | undefined =
+      action === "reject" ? prompt("Alasan penolakan") : action === "withdraw" ? prompt("Alasan penarikan pengajuan (minimal 10 karakter)") : undefined;
+    if (["reject", "withdraw"].includes(action) && !reason) return;
+    if (
+      action === "approve" &&
+      r.module === "purchase" &&
+      rd.documentType === "ORDER" &&
+      rd.projectId &&
+      (state?.assignedRole === "ADMIN" || state?.role === "ADMIN")
+    )
+      reason =
+        prompt(
+          "Alasan override kuota proyek (kosongkan bila PO masih dalam kuota)",
+        ) || undefined;
     if (
       ["post", "cancel"].includes(action) &&
       !confirm(
@@ -415,6 +432,14 @@ export default function OperationWorkspace() {
       await load();
     } catch {}
   }
+  const opsRequired = (module: string) =>
+    Boolean(
+      (
+        (state?.company.settings?.approval as
+          | Record<string, { requireOpsVerification?: boolean }>
+          | undefined) ?? {}
+      )[module]?.requireOpsVerification,
+    );
   const masters = state?.masters ?? [];
   const def = definitions.find((m) => m.key === view);
   const employeeView = view === "employees";
@@ -823,6 +848,7 @@ export default function OperationWorkspace() {
                   </Button>
                 </div>
               )}
+              {state.modules.some(m => m.key === view) && !state.actor.mustChangePassword && <ModuleMiniDashboard key={`${company}:${view}:${branch}:${query}`} company={company} module={view} branch={branch} query={query} revision={state} />}
               {(view === "home" || view === "dashboards") && (
                 <>
                   <section className="ops-hero">
@@ -862,28 +888,32 @@ export default function OperationWorkspace() {
                   <section className="kpi-grid ops-kpis">
                     {[
                       {
-                        name: "Penjualan diposting",
-                        value: money(totalValue("sales") + totalValue("pos")),
+                        name: state.ledgerOverview?.eligible ? "Pendapatan buku besar" : "Penjualan dokumen terposting",
+                        value: state.ledgerOverview?.eligible ? state.ledgerOverview.revenue === null ? "Belum tersedia" : money(state.ledgerOverview.revenue) : money(totalValue("sales") + totalValue("pos")),
                         icon: TrendingUp,
-                        note: "Dokumen aktual yang sudah diposting",
+                        href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "statements" })}` : undefined,
+                        note: state.ledgerOverview?.eligible ? state.ledgerOverview.basis : "Dokumen aktual dalam cakupan akses yang sudah diposting",
                       },
                       {
-                        name: "Piutang belum lunas",
-                        value: money(totalValue("sales", true)),
+                        name: state.ledgerOverview?.eligible ? "Piutang buku besar" : "Piutang dokumen terposting",
+                        value: state.ledgerOverview?.eligible ? state.ledgerOverview.receivable === null ? "Belum tersedia" : money(state.ledgerOverview.receivable) : money(totalValue("sales", true)),
                         icon: Receipt,
-                        note: "Saldo invoice pelanggan",
+                        href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "service" })}` : undefined,
+                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.receivable} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; rincian invoice perlu direkonsiliasi` : "Saldo invoice pelanggan dalam cakupan akses",
                       },
                       {
-                        name: "Kasbon belum selesai",
-                        value: money(totalValue("cash-advance", true)),
+                        name: state.ledgerOverview?.eligible ? "Saldo akun kasbon" : "Kasbon dokumen terposting",
+                        value: state.ledgerOverview?.eligible ? state.ledgerOverview.advance === null ? "Belum tersedia" : money(state.ledgerOverview.advance) : money(totalValue("cash-advance", true)),
                         icon: Wallet,
-                        note: "Dikurangi pertanggungjawaban & pengembalian",
+                        href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "ledger", account: String((state.company.settings.accounting as Record<string, unknown>)?.advance ?? "") })}` : undefined,
+                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.advance} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; sumber kasbon belum dipadankan ke akun` : "Dikurangi pertanggungjawaban & pengembalian",
                       },
                       {
                         name: "Menunggu persetujuan",
                         value: String(pendingCount),
                         icon: ShieldCheck,
-                        note: "Dokumen yang sudah diajukan",
+                        href: undefined,
+                        note: pendingCount ? "Dokumen yang sudah diajukan" : "Belum ada pengajuan pada cakupan ini. Dokumen impor tetap perlu ditinjau sebelum masuk workflow.",
                       },
                     ].map((k) => (
                       <article className="panel kpi" key={k.name}>
@@ -895,6 +925,7 @@ export default function OperationWorkspace() {
                         </div>
                         <h2>{k.value}</h2>
                         <p>{k.note}</p>
+                        {k.href && <a className="trace-link" href={k.href}>Telusuri laporan dan sumber <ArrowRight size={13} /></a>}
                       </article>
                     ))}
                   </section>
@@ -1715,6 +1746,24 @@ export default function OperationWorkspace() {
                 </strong>
               </div>
             </div>
+            {(opsRequired(detail.module) ||
+              Boolean(detail.data?.approvedName) ||
+              Boolean(detail.data?.quotaOverride)) && (
+              <p className="muted">
+                {opsRequired(detail.module) &&
+                  (detail.data?.opsVerifiedName
+                    ? `Diverifikasi OPS: ${String(detail.data.opsVerifiedName)}. `
+                    : detail.status === "SUBMITTED"
+                      ? "Menunggu verifikasi OPS. "
+                      : "")}
+                {detail.data?.approvedName
+                  ? `Disetujui: ${String(detail.data.approvedName)}${detail.data.approvalTier ? ` (tingkat ${String(detail.data.approvalTier)})` : ""}. `
+                  : ""}
+                {detail.data?.quotaOverride
+                  ? "Override kuota proyek tercatat di jejak audit."
+                  : ""}
+              </p>
+            )}
             <dl className="detail-fields">
               {Object.entries(detail.data).map(([key, value]) => (
                 <div key={key}>
@@ -1798,6 +1847,19 @@ export default function OperationWorkspace() {
                 Ajukan persetujuan
               </Button>
             )}
+            {detail.status === "SUBMITTED" &&
+              opsRequired(detail.module) &&
+              !(detail.data as Record<string, unknown>)?.opsVerifiedBy &&
+              ["ADMIN", "DIRECTOR", "MANAGER", "SUPERVISOR"].includes(
+                String(state?.assignedRole ?? state?.role),
+              ) && (
+                <Button
+                  disabled={busy}
+                  onClick={() => void transition(detail, "verify")}
+                >
+                  Verifikasi OPS
+                </Button>
+              )}
             {canManage && detail.status === "SUBMITTED" && (
               <>
                 <Button
@@ -1808,7 +1870,17 @@ export default function OperationWorkspace() {
                   Tolak
                 </Button>
                 <Button
-                  disabled={busy}
+                  disabled={
+                    busy ||
+                    (opsRequired(detail.module) &&
+                      !(detail.data as Record<string, unknown>)?.opsVerifiedBy)
+                  }
+                  title={
+                    opsRequired(detail.module) &&
+                    !(detail.data as Record<string, unknown>)?.opsVerifiedBy
+                      ? "Menunggu verifikasi OPS"
+                      : undefined
+                  }
                   onClick={() => void transition(detail, "approve")}
                 >
                   Setujui
@@ -1816,6 +1888,8 @@ export default function OperationWorkspace() {
               </>
             )}
             {canManage && detail.status === "APPROVED" && (
+              <>
+              <Button variant="outline" disabled={busy} onClick={() => void transition(detail, "reject")}>Tolak persetujuan</Button>
               <Button
                 disabled={
                   busy ||
@@ -1826,7 +1900,9 @@ export default function OperationWorkspace() {
               >
                 <Check size={15} /> Post / finalisasi
               </Button>
+              </>
             )}
+            {detail.status === "SUBMITTED" && (canManage || detail.actorId === state.actor.id) && <Button variant="outline" disabled={busy} onClick={() => void transition(detail, "withdraw")}>Tarik pengajuan</Button>}
             {editable &&
               ["DRAFT", "IMPORTED", "REJECTED"].includes(detail.status) && (
                 <Button
@@ -1887,10 +1963,14 @@ function Insights({ state }: { state: AppState }) {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Laba rugi per cabang ? {state.insights.month}</h2>
+              <h2>
+                Laba rugi per cabang · {state.insights.ledgerMonth ?? state.insights.month}
+              </h2>
               <p>
                 Pendapatan dan beban dari buku besar yang diposting, tanpa
-                jurnal penutup. Penjualan ditampilkan sebelum PPN.
+                jurnal penutup dan saldo awal. Penjualan ditampilkan sebelum PPN.
+                {state.insights.ledgerBasis === "BULAN_TERAKHIR_TERSEDIA" &&
+                  ` Bulan berjalan (${state.insights.month}) belum memiliki jurnal; ditampilkan bulan terakhir yang telah dibukukan.`}
               </p>
             </div>
           </div>
@@ -1930,7 +2010,7 @@ function Insights({ state }: { state: AppState }) {
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <h2>Penyelesaian WO per proyek ? {state.insights.month}</h2>
+            <h2>Penyelesaian WO per proyek · {state.insights.month}</h2>
             <p>
               Ketepatan waktu memakai tanggal penyelesaian aktual dan target WO.
               Sasaran SLA ditetapkan pada master proyek.

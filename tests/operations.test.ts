@@ -1173,4 +1173,199 @@ await test("Operational ERP integration", async (t) => {
       await assert.rejects(finalize(r, admin, admin));
     },
   );
+  await t.test(
+    "approval matrix: OPS verification, amount tiers, project quota, SoD and FR-CA-003",
+    async () => {
+      const director = actor("director", "DIRECTOR"),
+        supervisor = actor("supervisor", "SUPERVISOR"),
+        manager2 = actor("manager2", "MANAGER"),
+        admin2 = actor("admin2", "ADMIN"),
+        finance2 = actor("finance2", "FINANCE");
+      const go = (who: Actor, r: any, action: string, reason?: string) =>
+        transitionRecord(who, {
+          companyId: "A",
+          id: r.id,
+          version: r.version,
+          action,
+          reason,
+        });
+      await db.company.update({
+        where: { id: "A" },
+        data: {
+          settings: {
+            accounting: map,
+            approval: {
+              purchase: {
+                requireOpsVerification: true,
+                managerLimit: "1000",
+                directorLimit: "5000",
+              },
+            },
+          },
+        },
+      });
+      try {
+        const project = await master("PROJECT", "PRJQ", { cluster: "CLEANING" });
+        await master("PURCHASE_QUOTA", "Q1", {
+          projectId: project.id,
+          productId: product.id,
+          maxQuantity: "8",
+        });
+        const po = (q: string, p = product, price = "100") =>
+          draft(
+            "purchase",
+            {
+              documentType: "ORDER",
+              partnerId: vendor.id,
+              dueDate: date,
+              projectId: project.id,
+              opsVerifiedBy: "forged",
+            },
+            [line(p.id, price, q)],
+            manager,
+          );
+        let a = await po("5");
+        assert.equal(object(a.data).opsVerifiedBy, undefined, "forged stamp stripped");
+        a = await go(manager, a, "submit");
+        await assert.rejects(go(director, a, "approve"), /verifikasi OPS/);
+        await assert.rejects(go(manager, a, "verify"), /Pembuat/);
+        a = await go(supervisor, a, "verify");
+        assert.equal(object(a.data).opsVerifiedBy, "supervisor");
+        await assert.rejects(go(supervisor, a, "verify"), /sudah diverifikasi/);
+        a = await go(manager2, a, "approve");
+        assert.equal(a.status, "APPROVED");
+        assert.equal(object(a.data).approvalTier, "MANAGER");
+
+        let b = await go(manager, await po("20", service), "submit");
+        b = await go(supervisor, b, "verify");
+        await assert.rejects(go(manager2, b, "approve"), /Direktur/);
+        b = await go(director, b, "approve");
+        assert.equal(object(b.data).approvalTier, "DIRECTOR");
+
+        let c = await go(manager, await po("90", service), "submit");
+        c = await go(supervisor, c, "verify");
+        await assert.rejects(go(director, c, "approve"), /Administrator/);
+        c = await go(admin2, c, "approve");
+        assert.equal(object(c.data).approvalTier, "ADMIN");
+
+        let q = await go(manager, await po("5"), "submit");
+        q = await go(supervisor, q, "verify");
+        await assert.rejects(go(manager2, q, "approve"), /batasan permintaan/);
+        await assert.rejects(go(admin2, q, "approve"), /alasan/);
+        q = await go(admin2, q, "approve", "Tambahan area proyek disetujui BOD");
+        assert.equal(object(object(q.data).quotaOverride).by, "admin2");
+
+        const request = await draft(
+          "purchase",
+          { documentType: "REQUEST", dueDate: date },
+          [line(product.id, "10", "2")],
+          manager,
+        );
+        assert.equal(object(request.data).documentType, "REQUEST");
+        await assert.rejects(
+          draft("purchase", { documentType: "ORDER", dueDate: date }, [
+            line(product.id, "10"),
+          ]),
+          /Pemasok wajib/,
+        );
+        for (const r of [b, c, q]) await abandon(r);
+        await abandon(a);
+      } finally {
+        await db.company.update({
+          where: { id: "A" },
+          data: { settings: { accounting: map } },
+        });
+      }
+
+      const holder = await master("EMPLOYEE", "EMPQ", { position: "Operator" });
+      const advance = () =>
+        draft(
+          "cash-advance",
+          { employeeId: holder.id, dueDate: "2026-11-30", purpose: "Uji FR-CA-003" },
+          [line(undefined, "300")],
+        );
+      let first = await go(admin, await advance(), "submit");
+      const second = await advance();
+      await assert.rejects(go(admin, second, "submit"), /kasbon terbuka/);
+      first = await go(finance, first, "approve");
+      await assert.rejects(go(finance, first, "post"), /Pemberi persetujuan/);
+      first = await go(finance2, first, "post");
+      assert.equal(first.status, "POSTED");
+      await assert.rejects(go(admin, second, "submit"), /kasbon terbuka/);
+      await abandon(second);
+
+      await assert.rejects(
+        master("PARTNER", "VENTAX", { type: "VENDOR", taxId: "12.345" }),
+        /NPWP/,
+      );
+      await master("PARTNER", "VENTAX", {
+        type: "VENDOR",
+        taxId: "01.234.567.8-901.000",
+      });
+    },
+  );
+  await t.test(
+    "report finalisation needs evidence, director risk acceptance and two different sign-offs",
+    async () => {
+      const { finalizationStatus, updateFinalization, assertCloseAllowed } = await import("../src/lib/finalization");
+      const director = actor("director2", "DIRECTOR"), fin = actor("finance3", "FINANCE");
+      const period = await db.fiscalPeriod.create({
+        data: { companyId: "A", name: "Uji finalisasi", startDate: new Date("2031-01-01T00:00:00Z"), endDate: new Date("2031-01-31T00:00:00Z") },
+      });
+      await db.company.update({ where: { id: "A" }, data: { settings: { accounting: map, historicalLedger: { from: "2031-01-01", through: "2031-01-31", periodId: period.id, source: "Uji" } } } });
+      await db.sourceFile.upsert({ where: { id: "uji" }, update: {}, create: { id: "uji", companyId: "A", name: "Kertas kerja uji", mime: "application/vnd.ms-excel", path: "uji", url: "" } });
+      await db.dataImportBatch.upsert({ where: { id: "uji" }, update: {}, create: { id: "uji", companyId: "A", name: "Batch uji finalisasi" } });
+      for (const [i, code, sev] of [[1, "T01", "T"], [2, "T02", "S"]] as const)
+        await db.sourceFact.create({ data: { id: `fin-${code}`, companyId: "A", batchId: "uji", kind: "CONTROL", sourceKey: `uji-${code}`, sourceFileId: "uji", sheet: "TEMUAN", row: i, data: { cells: { "1": code, "2": `Temuan ${code}`, "4": sev, "7": "Finance", "8": "30-Nov-26" } } } });
+      const go = (who: Actor, data: Record<string, unknown>) => updateFinalization(who, "A", { periodId: period.id, ...data });
+      const { saveServicePlan, emptyServicePlan, calkSections } = await import('../src/lib/service-plans');
+      const { createJournal } = await import('../src/lib/accounting');
+      await createJournal({ periodId: period.id, date: '2031-01-01', type: 'OPENING', description: 'Saldo uji terisolasi finalisasi', lines: [{ accountId: map.cash, debit: '0.01', credit: '0' }, { accountId: map.payable, debit: '0', credit: '0.01' }] }, fin.id);
+      await saveServicePlan(fin, { ...emptyServicePlan(), companyId: 'A', periodId: period.id, framework: 'SAK_EP', frameworkEvidence: 'Dasar keputusan kerangka pada fixture terisolasi', notes: Object.fromEntries(calkSections.map(([key]) => [key, 'Catatan penjelasan untuk uji finalisasi terisolasi.'])) });
+      try {
+        let s = await finalizationStatus("A", period.id);
+        assert.equal(s.state, "DRAFT");
+        await assert.rejects(assertCloseAllowed(period.id), /belum dapat ditutup/);
+        await assert.rejects(go(fin, { action: "signoff", role: "FINANCE", note: "Diperiksa lengkap" }), /belum lulus/);
+        await assert.rejects(go(fin, { action: "finding", code: "T01", status: "RESOLVED", note: "Payroll aktual telah dibukukan lengkap" }), /bukti/);
+        await assert.rejects(go(fin, { action: "finding", code: "T01", status: "ACCEPTED_RISK", note: "Risiko diterima oleh Finance saja" }), /Direksi/);
+        s = await go(fin, { action: "finding", code: "T01", status: "RESOLVED", note: "Payroll aktual telah dibukukan lengkap", evidence: "JP-2031-0001" });
+        assert.equal(s.findings.find((f) => f.code === "T01")!.status, "RESOLVED");
+        assert.ok(s.readyForSignOff, "only T-level findings block sign-off");
+        await assert.rejects(go(director, { action: "signoff", role: "DIRECTOR", note: "Disetujui direksi" }), /setelah sign-off Finance/);
+        s = await go(fin, { action: "signoff", role: "FINANCE", note: "Diperiksa lengkap" });
+        await assert.rejects(go(fin, { action: "signoff", role: "DIRECTOR", note: "Disetujui sendiri" }), /Direktur|berbeda/);
+        s = await go(director, { action: "signoff", role: "DIRECTOR", note: "Disetujui direksi" });
+        await assertCloseAllowed(period.id);
+        s = await go(fin, { action: "finding", code: "T02", status: "IN_PROGRESS", note: "" });
+        assert.equal(s.signoffs.length, 0, "a change after sign-off invalidates it");
+        await assert.rejects(assertCloseAllowed(period.id));
+      } finally {
+        await db.company.update({ where: { id: "A" }, data: { settings: { accounting: map } } });
+        await db.sourceFact.deleteMany({ where: { batchId: "uji" } });
+        // Fiscal periods cannot be deleted (database invariant); the 2031 test period stays.
+      }
+    },
+  );
+  await t.test(
+    "documents inside a period booked from the working paper cannot be posted twice",
+    async () => {
+      await db.company.update({
+        where: { id: "A" },
+        data: {
+          settings: {
+            accounting: map,
+            historicalLedger: { from: "2026-11-01", through: "2026-11-30", source: "Kertas kerja uji" },
+          },
+        },
+      });
+      try {
+        const r = await draft("purchase", { partnerId: vendor.id, dueDate: date }, [line(service.id, "10")]);
+        await assert.rejects(finalize(r), /sudah dibukukan dari Kertas kerja uji/);
+        await abandon(r);
+      } finally {
+        await db.company.update({ where: { id: "A" }, data: { settings: { accounting: map } } });
+      }
+    },
+  );
 });

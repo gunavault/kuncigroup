@@ -16,6 +16,10 @@ import {
   allowedBranches,
 } from "@/lib/auth";
 import { operationSnapshot } from "@/lib/operations/read";
+import { moduleMiniDashboard } from "@/lib/operations/mini-dashboard";
+import { managementReport } from "@/lib/management-report";
+import { bankReconciliation } from "@/lib/bank-reconciliation";
+import { finalizationStatus, updateFinalization, finalizationPermissions } from "@/lib/finalization";
 import {
   saveRecord,
   saveMaster,
@@ -40,7 +44,24 @@ export async function GET(req: Request) {
         },
         { status: 428 },
       );
+    if (p.get('view') === 'module-kpis') return NextResponse.json(await moduleMiniDashboard(actor, companyId, p.get('module') ?? '', {
+      branchId: p.get('branch') || undefined, query: p.get('q') || undefined, periodId: p.get('period') || undefined,
+    }), { headers: { 'Cache-Control': 'no-store' } });
     if(p.get('view')==='source-data')return NextResponse.json(await sourceData(actor,companyId,p),{headers:{'Cache-Control':'no-store'}});
+    if (p.get("view") === "finalization") {
+      authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
+      if (allowedBranches(actor, companyId).length)
+        throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
+      return NextResponse.json({ ...await finalizationStatus(companyId, p.get("period") ?? ""), permissions: finalizationPermissions(actor, companyId) }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (p.get("view") === "bank-reconciliation")
+      return NextResponse.json(await bankReconciliation(actor, companyId, p.get("period") ?? "", p.get("account") || undefined), { headers: { "Cache-Control": "no-store" } });
+    if (p.get("view") === "management-report") {
+      authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER", "AUDITOR"]);
+      if (allowedBranches(actor, companyId).length)
+        throw new AccessError("Laporan manajemen memerlukan akses seluruh perusahaan.");
+      return NextResponse.json(await managementReport(companyId, p.get("period") || undefined), { headers: { "Cache-Control": "no-store" } });
+    }
     if (p.get("view") === "accounts") {
       authorizeCompany(actor, companyId, [
         "ADMIN",
@@ -133,6 +154,12 @@ export async function POST(req: Request) {
     if (actor.mustChangePassword && action !== "password")
       throw new AccessError("Ganti kata sandi awal terlebih dahulu.", 428);
     let result;
+    if (action === "finalization") {
+      authorizeCompany(actor, companyId, ["ADMIN", "FINANCE", "MANAGER"]);
+      if (allowedBranches(actor, companyId).length)
+        throw new AccessError("Finalisasi memerlukan akses seluruh perusahaan.");
+      result = { ...await updateFinalization(actor, companyId, body.data), permissions: finalizationPermissions(actor, companyId) };
+    } else
     if(action==='prepareStockOpening')result=await prepareStockOpening(actor,body.data);
     else if(action==='reviewSource')result=await reviewSource(actor,body.data);
     else if (action === "record") result = await saveRecord(actor, body.data);

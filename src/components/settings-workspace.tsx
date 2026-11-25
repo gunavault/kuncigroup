@@ -4,6 +4,14 @@ import { Button } from "./ui/button";
 import { UserManagement } from "./user-management";
 import { Settings2, MapPin, Users, ShieldCheck, KeyRound } from "lucide-react";
 import type { AppState } from "./operation-workspace";
+import { ratioMappingFields, suggestRatioMapping } from "@/lib/ratio-mapping";
+import { RatioMappingEditor } from "./ratio-mapping-editor";
+const approvalModules = [
+  ["purchase", "Purchase (PR/RFQ/PO/tagihan)"],
+  ["payments", "Pembayaran / pencairan"],
+  ["cash-advance", "Cash Advance"],
+  ["expenses", "Expenses"],
+] as const;
 export function SettingsWorkspace({
   state,
   onSubmit,
@@ -16,12 +24,16 @@ export function SettingsWorkspace({
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [accounts, setAccounts] = useState<
-      { id: string; code: string; name: string }[]
+      { id: string; code: string; name: string; category: string }[]
     >([]),
     [map, setMap] = useState<Record<string, unknown>>(
       (state.company.settings.accounting ?? {}) as Record<string, unknown>,
     ),
     [editBranch, setEditBranch] = useState<string>("");
+  const approval = (state.company.settings.approval ?? {}) as Record<
+    string,
+    unknown
+  >;
   useEffect(() => {
     if (state.role === "ADMIN")
       void fetch(`/api/operations?view=accounts&company=${state.company.id}`)
@@ -30,7 +42,7 @@ export function SettingsWorkspace({
     setMap(
       (state.company.settings.accounting ?? {}) as Record<string, unknown>,
     );
-  }, [state.company.id]);
+  }, [state.company.id, state.company.settings.accounting]);
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -51,6 +63,7 @@ export function SettingsWorkspace({
         </div>
       )}
       <UserManagement state={state} onSubmit={onSubmit} />
+      {["ADMIN", "FINANCE"].includes(state.role) && <RatioMappingEditor state={state} onSubmit={onSubmit} />}
       <section className="panel">
         <div className="panel-heading">
           <div>
@@ -256,6 +269,21 @@ export function SettingsWorkspace({
                         settings: {
                           ...state.company.settings,
                           accounting: map,
+                          approval: Object.fromEntries(
+                            approvalModules.map(([key]) => [
+                              key,
+                              {
+                                requireOpsVerification:
+                                  f.get(`ops-${key}`) === "on",
+                                managerLimit: String(
+                                  f.get(`mgr-${key}`) ?? "",
+                                ).trim(),
+                                directorLimit: String(
+                                  f.get(`dir-${key}`) ?? "",
+                                ).trim(),
+                              },
+                            ]),
+                          ),
                         },
                       },
                     }),
@@ -317,6 +345,51 @@ export function SettingsWorkspace({
                       </select>
                     </label>
                   ))}
+                </div>
+                <h3>Matriks persetujuan</h3>
+                <p className="muted">
+                  Batas dalam IDR (nilai dokumen termasuk pajak). Nilai ≤ batas
+                  Manager disetujui Manager; ≤ batas Direktur oleh Direktur; di
+                  atasnya oleh Administrator/BOD. Kosongkan kedua batas untuk
+                  persetujuan satu tingkat. Verifikasi OPS menambah tahap
+                  pemeriksaan fisik sebelum persetujuan; verifikator, pemberi
+                  persetujuan dan pemosting harus orang berbeda.
+                </p>
+                <div className="form-grid">
+                  {approvalModules.map(([key, label]) => {
+                    const p = (approval[key] ?? {}) as Record<string, unknown>;
+                    return (
+                      <fieldset key={key}>
+                        <legend>{label}</legend>
+                        <label className="inline-check">
+                          <input
+                            type="checkbox"
+                            name={`ops-${key}`}
+                            defaultChecked={p.requireOpsVerification === true}
+                          />
+                          Wajib verifikasi OPS
+                        </label>
+                        <label>
+                          Batas Manager (IDR)
+                          <input
+                            name={`mgr-${key}`}
+                            inputMode="decimal"
+                            pattern="\d{1,13}(\.\d{1,2})?"
+                            defaultValue={String(p.managerLimit ?? "")}
+                          />
+                        </label>
+                        <label>
+                          Batas Direktur (IDR)
+                          <input
+                            name={`dir-${key}`}
+                            inputMode="decimal"
+                            pattern="\d{1,13}(\.\d{1,2})?"
+                            defaultValue={String(p.directorLimit ?? "")}
+                          />
+                        </label>
+                      </fieldset>
+                    );
+                  })}
                 </div>
                 <div className="panel-footer">
                   <Button disabled={busy}>Simpan perusahaan & akun</Button>

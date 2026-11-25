@@ -113,10 +113,20 @@ export const modules: ModuleDefinition[] = [
     color: "blue",
     fields: [
       f("documentType", "Jenis dokumen", "select", false, {
-        options: ["BILL", "ORDER", "RFQ"],
+        options: ["BILL", "ORDER", "RFQ", "REQUEST"],
+        hint: "REQUEST = Permintaan Pembelian dari lapangan sebelum RFQ/PO; tidak membentuk jurnal.",
       }),
-      f("partnerId", "Pemasok", "select", true, { master: "PARTNER" }),
-      f("dueDate", "Jatuh tempo", "date", true),
+      f("partnerId", "Pemasok", "select", false, {
+        master: "PARTNER",
+        hint: "Wajib kecuali untuk Permintaan Pembelian (REQUEST).",
+      }),
+      f("dueDate", "Jatuh tempo / tanggal dibutuhkan", "date", true),
+      f("projectId", "Proyek (kuota pembelian)", "select", false, {
+        master: "PROJECT",
+      }),
+      f("requestorId", "Peminta barang", "select", false, {
+        master: "EMPLOYEE",
+      }),
       f("warehouseId", "Gudang penerimaan", "select", false, {
         master: "WAREHOUSE",
       }),
@@ -424,7 +434,20 @@ export const masterDefinitions: Record<
       f("email", "Email"),
       f("phone", "Telepon"),
       f("address", "Alamat", "textarea"),
-      f("taxId", "NPWP perusahaan"),
+      f("taxId", "NPWP / NITKU", "text", false, {
+        hint: "NPWP 15 atau 16 digit, atau NITKU 22 digit. Titik/strip diabaikan.",
+      }),
+      f("pkp", "Pengusaha Kena Pajak (PKP)", "checkbox"),
+    ],
+  },
+  PURCHASE_QUOTA: {
+    label: "Kuota pembelian proyek",
+    fields: [
+      f("projectId", "Proyek", "select", true, { master: "PROJECT" }),
+      f("productId", "Barang", "select", true, { master: "PRODUCT" }),
+      f("maxQuantity", "Kuantitas maksimum", "number", true),
+      f("startDate", "Berlaku mulai", "date"),
+      f("endDate", "Berlaku sampai", "date"),
     ],
   },
   PRODUCT: {
@@ -437,6 +460,9 @@ export const masterDefinitions: Record<
       f("cost", "Harga pokok referensi", "number"),
       f("reorder", "Stok minimum", "number"),
       f("trackExpiry", "Wajib lot / kedaluwarsa", "checkbox"),
+      f("managementFee", "Management fee", "checkbox", false, {
+        hint: "Baris invoice dengan barang ini dikelompokkan pada seksi Management Fee di PDF.",
+      }),
     ],
   },
   EMPLOYEE: {
@@ -456,6 +482,12 @@ export const masterDefinitions: Record<
       f("certification", "Nama sertifikasi"),
       f("certificateNo", "Nomor sertifikat"),
       f("certificateExpiry", "Masa berlaku sertifikat", "date"),
+      f("employmentStatus", "Status hubungan kerja", "select", false, {
+        options: ["PKWTT", "PKWT", "HARIAN_LEPAS", "MAGANG", "ALIH_DAYA"],
+        hint: "PP 35/2021: PKWT wajib memiliki tanggal berakhir; total jangka waktu maksimal 5 tahun.",
+      }),
+      f("contractStart", "Mulai kontrak", "date"),
+      f("contractEnd", "Akhir kontrak", "date"),
       f("userId", "ID akun pengguna"),
     ],
   },
@@ -465,6 +497,9 @@ export const masterDefinitions: Record<
       f("address", "Alamat", "textarea"),
       f("type", "Jenis lokasi", "select", true, {
         options: ["CENTRAL", "SITE", "OUTLET", "KITCHEN"],
+      }),
+      f("odooCode", "Kode lokasi Odoo", "text", false, {
+        hint: "Rujukan silang ke kode gudang Odoo (mis. KBAHO, KLHP) untuk rekonsiliasi migrasi.",
       }),
     ],
   },
@@ -497,6 +532,20 @@ export const masterDefinitions: Record<
       f("acquiredAt", "Tanggal perolehan", "date"),
       f("cost", "Harga perolehan", "number"),
       f("nextMaintenance", "Servis berikutnya", "date"),
+      f("assetScope", "Ruang lingkup aset", "select", false, {
+        options: ["HEAD_OFFICE", "PROJECT"],
+      }),
+      f("fiscalGroup", "Kelompok harta fiskal", "select", false, {
+        options: [
+          "KELOMPOK_1",
+          "KELOMPOK_2",
+          "KELOMPOK_3",
+          "KELOMPOK_4",
+          "BANGUNAN_PERMANEN",
+          "BANGUNAN_TIDAK_PERMANEN",
+        ],
+        hint: "Penyusutan fiskal (UU PPh Pasal 11, PMK 72/2023). Ditetapkan Finance; tidak diisi otomatis.",
+      }),
     ],
   },
   BOM: {

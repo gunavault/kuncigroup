@@ -23,6 +23,8 @@ enum PeriodStatus {
 enum EntryStatus {
   DRAFT
   POSTED
+  REJECTED
+  CANCELLED
 }
 enum EntryType {
   OPENING

@@ -9,6 +9,8 @@ import {
 } from "./money";
 import { journalSchema, accountSchema } from "./validation";
 import { object, str } from "./operations/shared";
+import { historicalWindow } from "./working-paper-ledger";
+import { authorizeCompany, allowedBranches, AccessError, type Actor } from "./auth";
 type Tx = Prisma.TransactionClient;
 const include = {
   lines: { include: { account: true } },
@@ -74,7 +76,7 @@ export async function insert(
   if (
     type === "OPENING" &&
     (await tx.journalEntry.count({
-      where: { fiscalPeriodId: pid, type: "OPENING" },
+      where: { fiscalPeriodId: pid, type: "OPENING", status: { in: ["DRAFT", "POSTED"] } },
     }))
   )
     throw new Error(
@@ -153,6 +155,23 @@ export async function createJournal(input: unknown, actorId?: string) {
     ),
   );
 }
+export async function concludeDraft(actor: Actor, id: string, action: "reject" | "cancel", reason: string) {
+  const note = reason.trim();
+  if (note.length < 10 || note.length > 1000) throw new Error("Alasan wajib 10–1.000 karakter.");
+  return atomic(async tx => {
+    const entry = await tx.journalEntry.findUniqueOrThrow({ where: { id } });
+    const role = authorizeCompany(actor, entry.companyId, ["ADMIN", "FINANCE"]);
+    if (allowedBranches(actor, entry.companyId).length) throw new AccessError("Tindakan jurnal memerlukan akses seluruh perusahaan.");
+    await openPeriod(tx, entry.fiscalPeriodId);
+    if (entry.status !== "DRAFT") throw new Error("Hanya jurnal draft yang dapat ditolak atau dibatalkan. Jurnal posted dikoreksi melalui pembalik.");
+    if (action === "reject" && entry.actorId === actor.id) throw new Error("Pembuat tidak dapat menolak draft sendiri; gunakan Batalkan.");
+    if (action === "cancel" && entry.actorId !== actor.id && role !== "ADMIN") throw new AccessError("Hanya pembuat atau Administrator dapat membatalkan draft.");
+    if (await tx.businessRecord.count({ where: { journalId: id } })) throw new Error("Gunakan workflow dokumen sumber untuk jurnal operasional.");
+    const result = await tx.journalEntry.update({ where: { id }, data: { status: action === "reject" ? "REJECTED" : "CANCELLED" } });
+    await tx.auditEvent.create({ data: { companyId: entry.companyId, actorId: actor.id, entityId: id, action: `JOURNAL_${result.status}`, details: { number: entry.journalNumber, previousStatus: entry.status, reason: note } } });
+    return result;
+  });
+}
 export async function postDraft(id: string, actorId?: string) {
   return atomic(async (tx) => {
     const e = await tx.journalEntry.findUniqueOrThrow({
@@ -160,7 +179,7 @@ export async function postDraft(id: string, actorId?: string) {
       include,
     });
     await openPeriod(tx, e.fiscalPeriodId);
-    if (e.status !== "DRAFT") throw new Error("Jurnal sudah posted.");
+    if (e.status !== "DRAFT") throw new Error("Hanya jurnal draft yang dapat diposting.");
     validateLines(
       e.lines.map((l) => ({
         ...l,
@@ -486,18 +505,35 @@ export async function previewClosing(pid: string) {
 export async function closePeriod(pid: string, actorId?: string) {
   return atomic(async (tx) => {
     const p = await openPeriod(tx, pid);
+    await (await import("./finalization")).assertCloseAllowed(pid, tx);
     if (
       await tx.journalEntry.count({
         where: { fiscalPeriodId: pid, status: "DRAFT" },
       })
     )
       throw new Error("Posting seluruh draft sebelum tutup buku.");
+    // Imported historical documents inside the window booked from the working paper are
+    // already in the ledger (via the working-paper journals); they do not block closing.
+    const history = historicalWindow(
+      (await tx.company.findUnique({ where: { id: p.companyId } }))?.settings,
+    );
     if (
       await tx.businessRecord.count({
         where: {
           companyId: p.companyId,
           date: { gte: p.startDate, lte: p.endDate },
           status: { in: ["IMPORTED", "DRAFT", "SUBMITTED", "APPROVED"] },
+          ...(history
+            ? {
+                NOT: {
+                  status: "IMPORTED",
+                  date: {
+                    gte: new Date(history.from + "T00:00:00Z"),
+                    lte: new Date(history.through + "T00:00:00Z"),
+                  },
+                },
+              }
+            : {}),
         },
       })
     )
@@ -530,28 +566,41 @@ export async function closePeriod(pid: string, actorId?: string) {
     const end = new Date(
       Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0),
     );
-    if (
-      await tx.fiscalPeriod.count({
-        where: {
-          companyId: p.companyId,
-          startDate: { lte: end },
-          endDate: { gte: start },
-        },
-      })
-    )
-      throw new Error("Periode berikutnya sudah ada atau bertumpang tindih.");
-    const next = await tx.fiscalPeriod.create({
-      data: {
+    const overlapping = await tx.fiscalPeriod.findMany({
+      where: {
         companyId: p.companyId,
-        name: new Intl.DateTimeFormat("id-ID", {
-          month: "long",
-          year: "numeric",
-          timeZone: "UTC",
-        }).format(start),
-        startDate: start,
-        endDate: end,
+        startDate: { lte: end },
+        endDate: { gte: start },
       },
     });
+    // Reuse the following month when it was already opened for live operations
+    // (exactly that month, still open, no opening balance yet); otherwise refuse.
+    const existing =
+      overlapping.length === 1 &&
+      overlapping[0].status === "OPEN" &&
+      overlapping[0].startDate.getTime() === start.getTime() &&
+      overlapping[0].endDate.getTime() === end.getTime() &&
+      !(await tx.journalEntry.count({
+        where: { fiscalPeriodId: overlapping[0].id, type: "OPENING", status: { in: ["DRAFT", "POSTED"] } },
+      }))
+        ? overlapping[0]
+        : null;
+    if (overlapping.length && !existing)
+      throw new Error("Periode berikutnya sudah ada atau bertumpang tindih.");
+    const next =
+      existing ??
+      (await tx.fiscalPeriod.create({
+        data: {
+          companyId: p.companyId,
+          name: new Intl.DateTimeFormat("id-ID", {
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          }).format(start),
+          startDate: start,
+          endDate: end,
+        },
+      }));
     if (lines.length)
       await insert(
         tx,
@@ -584,7 +633,20 @@ export async function snapshot(pid?: string, companyId = "DEMO") {
         where: { companyId },
         orderBy: { startDate: "desc" },
       });
-      const period = periods.find((p) => p.id === pid) ?? periods[0];
+      // Default to the latest period that already has posted entries, so the reports
+      // never open on an empty month while booked periods exist.
+      const withEntries = pid
+        ? []
+        : await tx.journalEntry.groupBy({
+            by: ["fiscalPeriodId"],
+            where: { companyId, status: "POSTED" },
+          });
+      const period =
+        periods.find((p) => p.id === pid) ??
+        periods.find((p) =>
+          withEntries.some((e) => e.fiscalPeriodId === p.id),
+        ) ??
+        periods[0];
       if (!period) throw new Error("Jalankan seed database terlebih dahulu.");
       const r = await reports(tx, period.id);
       const journals = await tx.journalEntry.findMany({

@@ -29,6 +29,16 @@ import {
 import { definitions, masterDefinitions, financialModules } from "./registry";
 import { receiveStock, takeStock } from "./stock";
 import { operationalEffects } from "./ancillary";
+import { historicalWindow, inWindow } from "../working-paper-ledger";
+import {
+  modulePolicy,
+  requiredTier,
+  meetsTier,
+  tierLabel,
+  opsVerifierRoles,
+  workflowKeys,
+  purchaseQuotaBreaches,
+} from "./approval";
 const reviewerRoles = ["ADMIN", "MANAGER", "FINANCE", "HR"] as const;
 const staffModules = new Set([
   "cash-advance",
@@ -279,6 +289,15 @@ export async function saveRecord(actor: Actor, input: unknown) {
   if (allowedBranches(actor, s.companyId).length && !s.branchId)
     throw new Error("Cabang wajib untuk cakupan akses Anda.");
   const data = validateModule(s.module, s.data);
+  // Verification and approval stamps are written only by transitionRecord.
+  // Editing a draft resets them, so the document has to be verified again.
+  for (const key of workflowKeys) delete data[key];
+  if (
+    s.module === "purchase" &&
+    str(data.documentType) !== "REQUEST" &&
+    !str(data.partnerId)
+  )
+    throw new Error("Pemasok wajib diisi kecuali untuk Permintaan Pembelian.");
   for (const f of m.fields)
     if (f.type === "datetime-local" && data[f.key])
       data[f.key] = localTime(data[f.key]);
@@ -634,6 +653,12 @@ export async function transitionRecord(actor: Actor, input: unknown) {
     )
       throw new Error("Modul dinonaktifkan.");
     let status: WorkflowStatus;
+    const company = await tx.company.findUniqueOrThrow({
+      where: { id: companyId },
+      select: { settings: true },
+    });
+    const policy = modulePolicy(company.settings, r.module);
+    const assigned = assignedRole(actor, companyId);
     if (action === "submit") {
       if (r.status !== "DRAFT")
         throw new Error("Hanya draft yang dapat diajukan.");
@@ -643,6 +668,42 @@ export async function transitionRecord(actor: Actor, input: unknown) {
       )
         throw new Error("Hanya pembuat atau pengelola dapat mengajukan.");
       validateModule(r.module, d);
+      if (r.module === "cash-advance") {
+        // FR-CA-003: one open cash advance per holder until it is settled.
+        const open = (
+          await tx.businessRecord.findMany({
+            where: {
+              companyId,
+              module: "cash-advance",
+              id: { not: r.id },
+              status: { in: ["SUBMITTED", "APPROVED", "POSTED"] },
+              data: { path: ["employeeId"], equals: str(d.employeeId) },
+            },
+            select: { number: true, status: true, amount: true, settled: true },
+          })
+        ).filter(
+          (o) => o.status !== "POSTED" || cents(o.amount) > cents(o.settled),
+        );
+        if (open.length)
+          throw new Error(
+            `Pemegang kasbon masih memiliki kasbon terbuka (${open.map((o) => o.number).join(", ")}). Selesaikan pertanggungjawaban atau pengembalian sisa lebih dahulu.`,
+          );
+      }
+      status = "SUBMITTED";
+    } else if (action === "verify") {
+      if (!policy?.requireOpsVerification)
+        throw new Error("Modul ini tidak memerlukan verifikasi OPS.");
+      if (r.status !== "SUBMITTED") throw new Error("Dokumen belum diajukan.");
+      if (d.opsVerifiedBy) throw new Error("Dokumen sudah diverifikasi OPS.");
+      if (!actor.superuser && !opsVerifierRoles.includes(assigned))
+        throw new Error(
+          "Verifikasi OPS memerlukan Supervisor, Manager, Direktur atau Administrator.",
+        );
+      if (!actor.superuser && r.actorId === actor.id)
+        throw new Error("Pembuat tidak dapat memverifikasi pengajuannya sendiri.");
+      d.opsVerifiedBy = actor.id;
+      d.opsVerifiedName = actor.name;
+      d.opsVerifiedAt = new Date().toISOString();
       status = "SUBMITTED";
       if (r.module === "attendances" && d.geofence !== "INSIDE")
         await notify(
@@ -671,7 +732,49 @@ export async function transitionRecord(actor: Actor, input: unknown) {
         throw new Error(
           "Alasan pengecualian GPS minimal 10 karakter wajib diisi sebelum persetujuan.",
         );
+      if (policy) {
+        if (policy.requireOpsVerification && !d.opsVerifiedBy)
+          throw new Error("Dokumen wajib diverifikasi OPS sebelum disetujui.");
+        if (!actor.superuser && d.opsVerifiedBy === actor.id)
+          throw new Error(
+            "Verifikator OPS tidak dapat sekaligus menyetujui dokumen yang sama.",
+          );
+        const tier = requiredTier(policy, cents(r.amount));
+        if (tier) {
+          if (!meetsTier(assigned, actor.superuser, tier))
+            throw new Error(
+              `Nilai dokumen memerlukan persetujuan minimal ${tierLabel[tier]}.`,
+            );
+          d.approvalTier = tier;
+        }
+      }
+      if (r.module === "purchase") {
+        const breaches = await purchaseQuotaBreaches(tx, r);
+        if (breaches.length) {
+          if (!(actor.superuser || assigned === "ADMIN"))
+            throw new Error(
+              `Melebihi batasan permintaan kuota proyek: ${breaches.join("; ")}. Hubungi Administrator untuk override.`,
+            );
+          if (str(s.reason).trim().length < 10)
+            throw new Error(
+              `Melebihi kuota proyek (${breaches.join("; ")}). Override memerlukan alasan minimal 10 karakter.`,
+            );
+          d.quotaOverride = {
+            by: actor.id,
+            name: actor.name,
+            reason: str(s.reason).trim(),
+            breaches,
+          };
+        }
+      }
+      d.approvedName = actor.name;
       status = "APPROVED";
+    } else if (action === "withdraw") {
+      if (r.status !== "SUBMITTED" || (r.actorId !== actor.id && !["ADMIN", "MANAGER", "FINANCE", "HR"].includes(role)))
+        throw new Error("Hanya pembuat atau pengelola dapat menarik pengajuan yang belum disetujui.");
+      if (str(s.reason).trim().length < 10) throw new Error("Alasan penarikan minimal 10 karakter.");
+      for (const key of workflowKeys) delete d[key];
+      status = "DRAFT";
     } else if (action === "reject") {
       if (
         !["SUBMITTED", "APPROVED"].includes(r.status) ||
@@ -701,6 +804,17 @@ export async function transitionRecord(actor: Actor, input: unknown) {
         throw new Error(
           "Posting yang berdampak pembukuan memerlukan Finance atau Admin.",
         );
+      // Dynamic SoD: whoever approved may not also post to the books (approved_by != paid_by).
+      if (needsFinance && !actor.superuser && r.approvedBy === actor.id)
+        throw new Error(
+          "Pemberi persetujuan tidak dapat memposting dokumen yang sama.",
+        );
+      // Periods already booked from the accountant's working paper must not be booked twice.
+      const history = historicalWindow(company.settings);
+      if (needsFinance && history && inWindow(history, r.date))
+        throw new Error(
+          `Periode ${history.from} s.d. ${history.through} sudah dibukukan dari ${history.source}. Posting dokumen ini akan menggandakan buku besar; catat koreksi sebagai jurnal penyesuaian.`,
+        );
       if (
         !needsFinance &&
         !["ADMIN", "MANAGER", "SUPERVISOR", "HR", "FINANCE"].includes(role)
@@ -714,24 +828,43 @@ export async function transitionRecord(actor: Actor, input: unknown) {
       data: {
         status,
         version: { increment: 1 },
-        ...(action === "approve" ? { approvedBy: actor.id } : {}),
-        ...(action === "reject" ? { data: json(d) } : {}),
+        ...(action === "approve" ? { approvedBy: actor.id } : ["reject", "withdraw"].includes(action) ? { approvedBy: null } : {}),
+        ...(["reject", "approve", "verify", "withdraw"].includes(action)
+          ? { data: json(d) }
+          : {}),
       },
       include: { lines: true },
     });
-    await audit(tx, actor, companyId, `DOCUMENT_${status}`, id, {
-      number: r.number,
-      module: r.module,
-      reason: s.reason ?? null,
-    });
-    if (action === "submit" || action === "approve")
-      await notify(
-        tx,
-        companyId,
-        r.branchId,
-        `${r.number} ${status === "SUBMITTED" ? "menunggu persetujuan" : "telah disetujui"}.`,
-        id,
-      );
+    await audit(
+      tx,
+      actor,
+      companyId,
+      action === "verify" ? "DOCUMENT_OPS_VERIFIED" : action === "withdraw" ? "DOCUMENT_WITHDRAWN" : `DOCUMENT_${status}`,
+      id,
+      {
+        number: r.number,
+        module: r.module,
+        reason: s.reason ?? null,
+        ...(d.approvalTier && action === "approve"
+          ? { tier: d.approvalTier }
+          : {}),
+        ...(d.quotaOverride && action === "approve"
+          ? { quotaOverride: true }
+          : {}),
+      },
+    );
+    if (["submit", "approve", "verify"].includes(action)) {
+      const pendingTier = policy
+        ? requiredTier(policy, cents(r.amount))
+        : null;
+      const message =
+        action === "approve"
+          ? "telah disetujui"
+          : policy?.requireOpsVerification && action === "submit"
+            ? "menunggu verifikasi OPS"
+            : `menunggu persetujuan${pendingTier ? ` ${tierLabel[pendingTier]}` : ""}`;
+      await notify(tx, companyId, r.branchId, `${r.number} ${message}.`, id);
+    }
     return result;
   });
 }

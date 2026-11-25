@@ -43,6 +43,17 @@ await t.test('loss and drawings close with correct signs and carry no temporary 
  const plan=await previewClosing(pid);assert.equal(plan.groups.length,3);plan.groups.forEach(g=>validateLines(g.lines));const next=await closePeriod(pid);const n=(await snapshot(next.id)).report;assert.equal(n.profit,'0.00');assert.equal(n.drawings,'0.00');assert.equal(n.equity,'2250.00');assert.equal(n.cash.ending,'1850.00');assert.equal(n.balanceDifference,'0.00');
 });
 await t.test('calendar-invalid dates are rejected before database writes',async()=>{const pid=(await snapshot()).period.id;await assert.rejects(createJournal({...base,periodId:pid,date:'2027-02-30',lines:[L('111','1','0'),L('411','0','1')]}));});
+await t.test('closing reuses an already-open following month for its opening balance',async()=>{
+ await db.fiscalPeriod.create({data:{id:'h-jan',name:'Jan 2030',startDate:new Date('2030-01-01Z'),endDate:new Date('2030-01-31Z')}});
+ await db.fiscalPeriod.create({data:{id:'h-feb',name:'Feb 2030',startDate:new Date('2030-02-01Z'),endDate:new Date('2030-02-28Z')}});
+ await createJournal({...base,periodId:'h-jan',date:'2030-01-10',lines:[L('111','700','0'),L('411','0','700')]});
+ const next=await closePeriod('h-jan');assert.equal(next.id,'h-feb','existing month is reused');
+ const opening=await db.journalEntry.findFirstOrThrow({where:{fiscalPeriodId:'h-feb',type:'OPENING'},include:{lines:true}});
+ assert.ok(opening.lines.length>0);
+ await db.fiscalPeriod.create({data:{id:'m-jan',name:'Jan 2031',startDate:new Date('2031-01-01Z'),endDate:new Date('2031-01-31Z')}});
+ await db.fiscalPeriod.create({data:{id:'m-odd',name:'Odd 2031',startDate:new Date('2031-02-15Z'),endDate:new Date('2031-03-14Z')}});
+ await assert.rejects(closePeriod('m-jan'),/bertumpang tindih/,'a misaligned following period is still refused');
+});
 await t.test('audit is append only',async()=>{const a=await db.auditEvent.findFirstOrThrow();await assert.rejects(db.auditEvent.delete({where:{id:a.id}}));});
 
 });

@@ -2121,6 +2121,17 @@ label {
   gap: 9px;
   align-items: center;
 }
+.module-mini-dashboard { margin: 0 0 24px; min-width: 0; }
+.module-mini-heading { display:flex; flex-wrap:wrap; gap:8px 20px; justify-content:space-between; margin-bottom:12px; font-weight:600; }
+.module-mini-heading small { color:#64748b; font-weight:400; }
+.module-mini-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:12px; }
+.module-mini-card { background:#fff; border:1px solid #e1e8e6; border-top:3px solid #277b64; border-radius:12px; padding:16px; min-width:0; display:flex; flex-direction:column; gap:9px; }
+.module-mini-card>span { font-size:12px; color:#475569; font-weight:600; }
+.module-mini-card strong { font-size:clamp(17px,1.5vw,23px); color:#173b32; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.module-mini-card.money-card { grid-column:span 2; }
+.module-mini-card.money-card strong { white-space:nowrap; font-size:clamp(16px,1.6vw,23px); }
+.module-mini-card small { color:#64748b; font-size:11px; line-height:1.45; }
+@media(max-width:600px){ .module-mini-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } .module-mini-card { padding:12px; } .module-mini-card strong { font-size:17px; } }
 .ingredient-row select {
   flex: 1;
 }
@@ -2132,3 +2143,45 @@ label {
 }
 
 .source-data-panel{margin-bottom:24px}.source-filters{padding:18px}.source-detail{padding:20px;max-width:100%;overflow-wrap:anywhere}.source-detail dl>div{display:grid;grid-template-columns:minmax(120px,1fr) 3fr;gap:16px;padding:9px 0;border-bottom:1px solid #e5e7eb}.source-detail dt{font-weight:600}.source-detail dd{margin:0;white-space:pre-wrap}.source-issues{padding:18px}.source-data-panel .filter-bar{display:flex;gap:16px;padding:12px 18px}.source-data-panel .filter-bar button{padding:8px 12px;border:1px solid #d7dce4;border-radius:7px}.source-data-panel .filter-bar .active{background:#edf4f5}.source-data-panel .panel-footer{justify-content:space-between}@media(max-width:700px){.source-detail dl>div{grid-template-columns:1fr}.source-data-panel .form-grid{grid-template-columns:1fr}}
+
+/* Management report */
+.narrative { margin: 0; padding: 4px 22px 18px 38px; display: grid; gap: 8px; line-height: 1.55; }
+.narrative li { color: var(--ink, #14302d); }
+tr.total td { font-weight: 700; border-top: 1px solid rgba(18, 59, 54, 0.25); }
+.kpi small { display: block; margin-top: 4px; opacity: 0.7; }
+.checklist { list-style: none; margin: 0; padding: 4px 22px 14px; display: grid; gap: 6px; }
+.checklist li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.checklist li.ok svg { color: #178a73; }
+.checklist li.todo svg { color: #b45309; }
+.checklist li span { opacity: 0.75; font-size: 0.9em; }
+.trace-link { background: transparent; border: 0; padding: 3px 0; color: #176550; cursor: pointer; text-align: left; text-decoration: underline; text-underline-offset: 3px; font: inherit; }
+.trace-link:focus-visible { outline: 2px solid #176550; outline-offset: 3px; }
+.trace-link:disabled { text-decoration: none; cursor: default; color: #334155; }
+.trace-backdrop { position: fixed; inset: 0; z-index: 100; background: #0f262bb3; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.trace-dialog { width: min(1100px,100%); max-height: 94dvh; display: flex; flex-direction: column; margin: 0; overflow: hidden; }
+.trace-dialog .panel-heading { flex-shrink: 0; }
+.trace-breadcrumb { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 0 22px 12px; border-bottom: 1px solid #e1e8e6; }
+.trace-breadcrumb span { display: inline-flex; align-items: center; gap: 6px; }
+.trace-body { overflow: auto; padding: 18px 22px; min-height: 180px; overflow-wrap: anywhere; }
+.trace-body h3 { margin: 20px 0 10px; }
+.trace-body p { margin: 10px 0; line-height: 1.5; }
+.trace-body .table-scroll { margin: 12px 0; }
+.trace-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.trace-summary strong { font-size: 22px; }.trace-summary small { flex-basis: 100%; color: #64748b; }
+.trace-pagination { flex-wrap: wrap; margin: 18px 0 4px; }.trace-pagination span { font-size: 12px; }
+.ratio-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap: 14px; padding: 0 20px 20px; }
+.ratio-card { border: 1px solid #e1e8e6; border-radius: 10px; padding: 16px; min-width: 0; overflow-wrap: anywhere; }
+.ratio-card h3 { font-size: 14px; margin: 7px 0 12px; }.ratio-card>strong { font-size: 22px; color: #175b49; }
+.ratio-card>small { font-size: 11px; color: #64748b; }.ratio-card p { font-size: 12px; line-height: 1.6; margin: 12px 0; }
+.ratio-reason { color: #965200; }.ratio-card summary { color: #176550; font-size: 12px; cursor: pointer; }
+.service-tabs { display:flex;flex-wrap:wrap;gap:8px;padding:0 20px 18px; }
+.service-filters { display:flex;flex-wrap:wrap;gap:18px;padding:14px 20px; }.service-filters label { min-width:200px;flex:1; }
+.service-summary { padding:0 20px 20px; }.service-summary h2 { font-size:clamp(17px,1.5vw,23px);overflow-wrap:anywhere; }
+.service-plan-row { display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;padding:15px 0;border-bottom:1px solid #e1e8e6;margin-bottom:12px; }
+.service-report fieldset { border:1px solid #dbe6e2;border-radius:8px;padding:16px;min-width:0; }.service-report fieldset>label { margin-bottom:14px; }
+.service-report textarea { min-height:100px; }.service-report .form-grid { padding:18px 20px; }.service-report { min-width:0; }
+.service-export { margin:12px 0; }
+.wp-site-title { padding:14px 24px 6px; margin:0; font-size:15px; }
+@media(max-width:600px){ .service-tabs { padding:0 12px 12px; }.service-tabs .button { font-size:12px; }.service-summary { grid-template-columns:1fr; }.service-plan-row { grid-template-columns:1fr; } }
+@media(max-width:600px){ .module-mini-card.money-card { grid-column: 1 / -1; }.module-mini-card.money-card strong { white-space: nowrap; font-size: clamp(16px,4.3vw,23px); } }
+@media(max-width:600px){ .trace-backdrop { padding: 6px; }.trace-dialog { max-height: 98dvh; }.trace-body { padding: 12px; }.trace-breadcrumb { padding: 0 12px 10px; font-size: 12px; } }

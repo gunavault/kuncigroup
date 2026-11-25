@@ -3,6 +3,7 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {matchEmployeeIdentity,identityName} from '../src/lib/source-identity';
 import {classifySourceAccount} from '../src/lib/source-account';
+import {companyCatalogKinds} from '../src/lib/operations/master-scope';
 import {Prisma,PrismaClient} from '@prisma/client';
 const db=new PrismaClient(),bundle=JSON.parse(readFileSync(process.argv[2]??'data/upload-audit/import-v3.json','utf8'));
 const id=(s:string)=>'v3-'+createHash('sha256').update(s).digest('hex').slice(0,28);
@@ -40,7 +41,10 @@ await db.$transaction(async tx=>{
   // An approved master keeps its reviewed operational settings and user linkage.
   if(prior.sourceVerification==='VERIFIED'&&m.kind!=='EMPLOYEE'){for(const k of ['sourceVerification','type','uom','trackExpiry','cost','salePrice'])if(prior[k]!==undefined)next[k]=prior[k];}
   if(prior.userId)next.userId=prior.userId;
-  const saved=old?await tx.masterRecord.update({where:{id:old.id},data:{name:prior.importBatch===bundle.batch&&prior.normalizerVersion===bundle.normalizerVersion?old.name:m.name,branchId:branchRefs.get(m.branch)??null,active:prior.importBatch===bundle.batch&&prior.normalizerVersion===bundle.normalizerVersion?old.active:m.active,data:next}}):await tx.masterRecord.create({data:{id:id('master:'+companyId+':'+m.key),companyId,branchId:branchRefs.get(m.branch)??null,kind:m.kind,code,name:m.name,active:m.active,data:next,sourceKey:'upload-master:'+m.key,sourceFileId:m.file,sourceRow:m.sheet+'!'+m.row}});
+  const sharedCatalog=companyCatalogKinds.includes(m.kind)&&prior.sourceVerification!=='VERIFIED';
+  const masterBranchId=sharedCatalog?null:prior.sourceVerification==='VERIFIED'&&old?old.branchId:branchRefs.get(m.branch)??null;
+  if(sharedCatalog){next.scope='COMPANY';next.sourceLocation=next.sourceLocation??m.branch;}
+  const saved=old?await tx.masterRecord.update({where:{id:old.id},data:{name:prior.importBatch===bundle.batch&&prior.normalizerVersion===bundle.normalizerVersion?old.name:m.name,branchId:masterBranchId,active:prior.importBatch===bundle.batch&&prior.normalizerVersion===bundle.normalizerVersion?old.active:m.active,data:next}}):await tx.masterRecord.create({data:{id:id('master:'+companyId+':'+m.key),companyId,branchId:masterBranchId,kind:m.kind,code,name:m.name,active:m.active,data:next,sourceKey:'upload-master:'+m.key,sourceFileId:m.file,sourceRow:m.sheet+'!'+m.row}});
   refs.set(m.key,saved.id);if(old){result.updated++;all=all.map(v=>v.id===saved.id?saved:v);}else{result.created++;all.push(saved);}
   if(m.kind==='EMPLOYEE'&&!m.active){await tx.accessGrant.updateMany({where:{companyId,employeeId:saved.id},data:{active:false}});if(prior.userId){await tx.accessGrant.updateMany({where:{companyId,userId:prior.userId},data:{active:false}});await tx.userSession.deleteMany({where:{userId:prior.userId}});}}
  }

@@ -2,6 +2,16 @@
 
 Alamat masuk: https://kunci-erp-45422633542.us-central1.run.app. Semua langkah berikut dilakukan setelah login. Pilih perusahaan, kemudian cabang yang sesuai. Data DEMO hanya untuk latihan; jangan memakai jurnal DEMO untuk pembukuan KBA/KCG/KCL.
 
+## Ringkasan pada setiap modul
+
+Di atas setiap modul terdapat 4–6 kartu. Kartu menghitung seluruh register dalam hak akses, termasuk baris di halaman tabel berikutnya. Pilih perusahaan dan cabang sebelum membaca angka. Katalog barang/jasa, partner dan referensi organisasi yang ditetapkan bersama tetap tersedia saat memilih cabang; karyawan, gudang, aset dan saldo stok tetap mengikuti lokasi.
+
+Kartu dokumen mengikuti pencarian nomor/judul. Kartu master mengikuti nama/kode. Apps dan Settings merangkum konfigurasi, bukan hasil pencarian dokumen. Kartu absensi sumber berlabel seluruh tanggal dan terpisah dari filter register sumber di bawahnya. Accounting mengikuti periode fiskal terpilih; kartu laba buku besar pada Dashboards mencakup seluruh periode dan mengecualikan jurnal penutup. Panel analitik bulanan di bawahnya tetap berlabel bulan berjalan.
+
+Nilai piutang/kasbon/utang hanya menghitung dokumen POSTED yang mempunyai jurnal. Quotation/order yang dikonfirmasi tidak menambah nilai tersebut. Tanda — berarti hak akses belum mengizinkan nilai itu. Angka 0 berarti tidak ada data dalam cakupan yang dipilih. Saat memuat atau gagal, kartu menunjukkan status dan tombol Coba lagi.
+
+Rekap kekosongan Excel memuat kode dokumen/master, kolom yang belum lengkap, dasar pemeriksaan, prioritas, pemilik tindakan dan lokasi sumber. Gunakan filter untuk membedakan kolom wajib, persiapan operasional dan status impor. Isi PIC, target dan hasil tindak lanjut pada kolom kuning. Kosong dan selisih sumber harus dibuktikan, bukan diganti dengan nilai perkiraan.
+
 ## 1. Persiapan administrator dan Finance
 
 1. Settings: ubah kata sandi administrator; buat akun individu minimal 16 karakter. Pengguna baru diminta mengganti kata sandi saat login pertama.
@@ -85,3 +95,118 @@ Gunakan menu **Data unggahan** untuk menelusuri enam workbook, memfilter tanggal
 Di Settings, gunakan **Hierarki & manajemen pengguna** untuk membuat username/email individual, menetapkan peran, atasan, cabang dan karyawan. Kata sandi awal wajib diganti. Hak baru dan penonaktifan mencabut sesi lama. Baca matriks akses dan langkah pemeriksaan saldo awal stok dalam [laporan uji tuntas v3](LAPORAN_UJI_TUNTAS_V3.md).
 
 Jangan menjadikan angka sumber yang belum ditinjau sebagai ledger resmi. Ringkasan absensi, akun penampung, tanggal dan biaya unit yang belum terkonfirmasi tetap memerlukan keputusan HR/Finance.
+
+## Matriks persetujuan, verifikasi OPS dan kuota proyek
+
+Pemilik (akun superuser) mengatur **Settings → Perusahaan → Matriks persetujuan** per modul Purchase, Pembayaran, Cash Advance dan Expenses:
+
+- **Wajib verifikasi OPS**: setelah diajukan, dokumen menunggu tombol **Verifikasi OPS** dari Supervisor/Manager/Direktur/Administrator yang bukan pembuat. Tombol **Setujui** baru aktif setelah verifikasi.
+- **Batas Manager / Batas Direktur (IDR, termasuk pajak)**: nilai ≤ batas Manager disetujui Manager; ≤ batas Direktur disetujui Direktur; di atasnya hanya Administrator/BOD. Kosongkan kedua batas untuk persetujuan satu tingkat seperti sebelumnya. Finance tidak menyetujui dokumen bertingkat; Finance memposting.
+- Pembuat, verifikator OPS, pemberi persetujuan dan pemosting jurnal harus orang berbeda (pengecualian hanya akun pemilik untuk bootstrap).
+
+Alur pembelian yang disarankan: **REQUEST** (Permintaan Pembelian dari lapangan; pemasok boleh kosong; tidak membentuk jurnal) → **RFQ** → **ORDER** (PO; diverifikasi OPS dan disetujui sesuai batas) → penerimaan barang → **BILL** (tagihan, diposting Finance) → **Pembayaran** (dapat diberi batas persetujuan terpisah sebagai otorisasi pencairan BOD).
+
+**Kuota pembelian proyek**: buat master *Kuota pembelian proyek* (proyek, barang, kuantitas maksimum, periode). Saat PO (ORDER) dengan proyek tersebut disetujui, kuantitas PO yang sudah disetujui/diposting dijumlahkan. Bila melebihi sisa kuota, persetujuan ditolak dengan pesan "Melebihi batasan permintaan". Administrator dapat melakukan override dengan alasan minimal 10 karakter; alasan dan rincian kuota tercatat di dokumen dan jejak audit. Tagihan (BILL) tidak dihitung agar PO dan tagihannya tidak terhitung ganda.
+
+**Kasbon (FR-CA-003)**: pemegang kasbon tidak dapat mengajukan kasbon baru selama masih ada kasbon yang diajukan, disetujui, atau sudah dicairkan tetapi belum habis dipertanggungjawabkan/dikembalikan.
+
+**Management fee**: centang *Management fee* pada master barang/jasa. PDF dokumen memisahkan baris tersebut ke seksi Management Fee dengan subtotal masing-masing.
+
+**NPWP**: master pelanggan/pemasok hanya menerima NPWP 15/16 digit atau NITKU 22 digit (titik/strip diabaikan). Nilai seperti "not applicable" harus dikosongkan.
+
+## Master data v5: kontrak, aset dan kode lokasi Odoo
+
+- **Karyawan:** isi *Status hubungan kerja*, *Mulai kontrak* dan *Akhir kontrak*. PKWT wajib memiliki tanggal akhir dan jangka waktunya tidak boleh lebih dari 5 tahun (PP 35/2021). Dashboard Employees menampilkan kontrak dan sertifikat yang habis dalam 30 hari.
+- **Aset:** *Ruang lingkup* (Head Office/Proyek) sudah diisi dari jejak workbook sumber. *Kelompok harta fiskal* ditetapkan Finance.
+- **Gudang:** *Kode lokasi Odoo* membantu rekonsiliasi migrasi. Gudang KBAHO dibuat dengan status menunggu verifikasi. Duplikat dan lokasi GOR yang belum dipetakan tercantum di LAPORAN_DATA_V5.md.
+- **Partner:** tandai *PKP* hanya bila NPWP/NITKU tersedia.
+
+## Buku besar 2026 dan laporan manajemen (v6)
+
+- Jurnal Januari–Oktober 2026 KBA telah dibukukan dari *Kertas Kerja Akuntansi KBA 2026* ke periode **Januari s.d. Oktober 2026 (kertas kerja)**. Periode ini dibiarkan terbuka. Koreksi atas temuan dicatat sebagai jurnal penyesuaian di periode tersebut. Saat Finance menutup periode, saldo dibawa ke November.
+- Dokumen operasional bertanggal dalam rentang itu tidak dapat diposting lagi agar buku besar tidak terhitung ganda.
+- **Accounting → Laporan manajemen** menyajikan laba rugi bertingkat, tren bulanan, posisi, arus kas, biaya terbesar, narasi otomatis dan temuan kertas kerja. Laporan dapat diunduh dalam PDF dan Excel.
+- Dashboard laba rugi per cabang menampilkan bulan terakhir yang sudah dibukukan bila bulan berjalan belum memiliki jurnal.
+- Rincian rekonsiliasi dan batasan ada di LAPORAN_KEUANGAN_V6.md.
+
+## Penelusuran laporan, rasio dan pasangan tombol workflow (v7)
+
+**Penelusuran (drill-down / drill-up).** Di *Accounting → Laporan keuangan*, klik pos Neraca, Laba rugi, Perubahan modal atau Arus kas. Jendela *Telusur laporan → bukti sumber* membuka:
+
+1. akun buku besar pembentuk pos beserta nilainya;
+2. jurnal pembentuk akun (25 per halaman, terbaru lebih dulu);
+3. detail jurnal: baris jurnal, baris kertas kerja (file, sheet, baris), register invoice sumber dengan nomor yang sama, dokumen operasional (invoice/PO/WO/kasbon) yang diposting ke jurnal itu, lampiran, dan tautan bukti https di uraian.
+
+Jejak navigasi di bagian atas dipakai untuk naik kembali. Dari detail jurnal, tombol *pos laporan terkait* membawa ke pos Neraca/Laba rugi/Arus kas yang dipengaruhi jurnal itu (drill-up). Nomor jurnal di *Jurnal umum* dan *Buku besar* juga dapat diklik. Relasi hanya ditampilkan bila ada tautan eksplisit; kecocokan nomor yang tidak unik diberi label *perlu verifikasi* dan tidak pernah ditebak dari nama atau nominal.
+
+**Rasio keuangan dan operasional.** Panel *Rasio keuangan & operasional* menampilkan rumus, pembilang, penyebut, dasar periode dan tautan telusur untuk setiap rasio (margin, beban usaha, liabilitas terhadap aset/ekuitas, kas, arus kas operasi, ROA/ROE, perputaran aset, rasio lancar/cepat/kas, DER berbunga, DIO, DSO, interest coverage, penyelesaian dokumen, pertanggungjawaban kasbon, kelulusan QC). Rasio tidak disetahunkan. Bila klasifikasi akun belum ditetapkan atau penyebut nol/negatif, rasio tampil *Belum tersedia* beserta alasannya — bukan nol. Klasifikasi aset/liabilitas lancar, aset cepat, pinjaman berbunga, persediaan, piutang usaha, penjualan kredit dan beban bunga ditetapkan Finance di *Pengaturan → Pemetaan rasio*. Rasio ikut diekspor bersama laporan keuangan dan laporan manajemen.
+
+**Pasangan tombol workflow.**
+
+| Tindakan | Pasangannya | Siapa | Catatan |
+|---|---|---|---|
+| Ajukan persetujuan | Tarik pengajuan | Pembuat atau pengelola | Alasan minimal 10 karakter; stempel OPS/persetujuan dihapus, dokumen kembali draft |
+| Setujui | Tolak (sebelum disetujui) dan Tolak persetujuan (setelah disetujui, sebelum posting) | Pengelola | Alasan wajib |
+| Post jurnal draft | Tolak draft / Batalkan draft | Finance/Admin; penolak ≠ pembuat; pembatalan oleh pembuat atau Admin | Draft tidak dihapus: status *Ditolak*/*Dibatalkan* dan jejak audit tersimpan |
+| Jurnal diposting | Jurnal pembalik | Finance/Admin | Jurnal posted tetap tidak dapat diedit atau dihapus |
+| Sign-off Finance / Persetujuan Direksi | Tarik sign-off; Tolak / kembalikan laporan | Penandatangan atau Admin; penolakan oleh Direksi yang berbeda dari Finance | Sign-off otomatis kedaluwarsa bila buku besar berubah setelah ditandatangani |
+| Catat pengecualian Direksi | Cabut pengecualian | Direksi/Admin | Alasan minimal 10 karakter |
+| Setujui baris impor | Tolak baris impor | Pengelola | Alasan wajib |
+
+Sign-off dan UAT bisnis tetap harus dilakukan pengguna Finance dan Direksi yang berwenang.
+
+## Rekonsiliasi bank, pemetaan rasio otomatis dan register bukti (v8)
+
+**Rekonsiliasi bank.** *Accounting → Rekonsiliasi bank* menampilkan:
+
+1. cakupan: setiap akun kas/bank bersaldo dan jumlah baris rekening koran yang sudah diimpor;
+2. per bulan: mutasi masuk/keluar dan saldo menurut koran dan buku, selisih buku − koran, serta jumlah baris cocok / hanya di koran / hanya di buku;
+3. daftar item belum cocok. *Hanya di koran* berarti transaksi bank belum dibukukan (atau dibukukan ke akun bank lain). *Hanya di buku* berarti jurnal tidak terlihat di rekening tersebut; nomor jurnalnya dapat diklik untuk penelusuran sampai bukti.
+
+Baris dianggap cocok bila arah dan nominal sama persis dan tanggal berselisih paling lama 3 hari. Sistem tidak membuat jurnal otomatis; Finance membukukan koreksi sebagai jurnal penyesuaian. Bila saldo awal suatu bulan pada workbook koran berbeda dengan saldo akhir bulan sebelumnya, atau judul sheet tidak sesuai isinya, peringatan ditampilkan dan saldo koran dihitung dari mutasi — cocokkan dengan PDF dari bank.
+
+Rekening koran diimpor dari workbook Finance *Jurnal rekening koran* di Google Drive dengan `scripts/import-bank-statement.ts` (dry-run bawaan; `--apply` untuk menyimpan). Setiap baris diperiksa terhadap saldo berjalan yang tercetak.
+
+**Syarat finalisasi baru:** *Rekening bank direkonsiliasi ke rekening koran s.d. akhir periode*. Setiap rekening bank bersaldo harus memiliki koran sampai bulan terakhir periode dan saldo buku harus sama dengan saldo koran.
+
+**Pemetaan rasio otomatis.** Di *Pengaturan → Klasifikasi akun untuk rasio*, tombol *Usulkan pemetaan otomatis dari bagan akun* mengisi pilihan dari kode dan nama akun:
+- aset lancar 111–113 (tanpa pajak tangguhan);
+- liabilitas lancar 21x;
+- aset cepat: kas dan piutang;
+- pinjaman berbunga: akun pinjaman/pembiayaan;
+- persediaan, piutang usaha;
+- penjualan kredit memerlukan sumber kontrak/invoice dan tidak diisi otomatis;
+- beban bunga.
+
+Tinjau, ubah bila perlu, lalu simpan. Script `scripts/apply-ratio-mapping.ts` menerapkan usulan yang sama dan tidak menimpa pemetaan Finance tanpa `--replace`.
+
+**Register bukti transaksi.** Detail jurnal pada penelusuran kini menampilkan baris register bukti (sheet BUKTI kertas kerja) yang tertaut melalui baris treasury (TRS) atau register invoice (INV), beserta status pemeriksaan dan kelengkapannya.
+
+## Dashboard dan siklus akuntansi jasa (v9)
+
+**Membaca angka dashboard.** Kartu utama bagi pengguna keuangan seluruh perusahaan mengambil buku besar pada periode terakhir yang memiliki jurnal POSTED. Kartu menyebutkan periode dan menyediakan tautan penelusuran. Piutang/kasbon adalah saldo akun kontrol yang dipetakan, sehingga belum merupakan aging per invoice atau pertanggungjawaban per pemegang kasbon. Pengguna bercakupan cabang/staf tetap menerima angka dokumen dalam hak aksesnya. Angka sumber IMPORTED tidak ditambahkan ke buku besar. Nol persetujuan berarti belum ada pengajuan, sedangkan saldo yang belum dapat dibuktikan ditulis *Belum tersedia*.
+
+Inventory menampilkan baris saldo stok sumber bila belum ada lot operasional. Buka **Data unggahan** untuk kuantitas per produk/gudang. Selesaikan stock opname, bukti harga, lokasi dan lot/kedaluwarsa sebelum menyiapkan draft saldo awal. Kuantitas satuan berbeda tidak dijumlahkan. RAB merupakan rencana kebutuhan, bukan bukti penerimaan atau stok fisik.
+
+**Accounting → Siklus jasa & CaLK.** Pilih periode, lalu gunakan enam tab berikut.
+
+| Tab | Cara menggunakan dan dasar angka |
+|---|---|
+| Piutang & utang | Bandingkan akun kontrol, rincian dokumen POSTED dan saldo belum dipadankan. Cari nomor/pihak atau filter kelompok jatuh tempo. Penyelesaian dihitung dari jurnal pembayaran sampai akhir periode; pembayaran setelahnya tidak mengubah aging historis. Tanggal jatuh tempo kosong tetap *Belum diketahui*. Klik nomor dokumen untuk jurnal dan bukti. |
+| Profitabilitas site | Pendapatan, beban langsung jasa dan beban lain menjumlah kembali ke laba/rugi perusahaan. Jurnal tanpa proyek eksplisit berada pada *Belum dialokasikan*. Finance/Admin dapat menambahkan alokasi analitis: baris jurnal, proyek, nominal dan rujukan bukti minimal 20 karakter. Total alokasi tidak boleh melebihi nilai baris. Alokasi tidak mengubah jurnal terposting. |
+| Biaya jasa & stok | Rasio biaya tenaga kerja terhadap pendapatan memakai periode yang sama dan pemetaan akun yang ditinjau Finance. Mutasi stok ditampilkan per halaman. Payroll neto tidak ditaksir menjadi gaji bruto/lembur/BPJS. |
+| Anggaran | Masukkan RAB/RAP per proyek dan kategori Chemical/Tenaga kerja dengan bukti. Anggaran berstatus rencana. Aktual mengikuti akun yang ditinjau dan alokasi proyek. Sisa anggaran belum dapat dipastikan selama biaya perusahaan masih belum dialokasikan. |
+| Rencana kas | Kas dasar adalah saldo akhir buku besar. Tambahkan penerimaan/pengeluaran setelah tanggal dasar beserta sumber jadwalnya. Saldo skenario dan kebutuhan talangan dihitung dalam sen. Rencana bukan transaksi aktual dan tidak memposting jurnal. Rencana kosong belum merupakan proyeksi lengkap. |
+| CaLK & kebijakan | Pilih kerangka pelaporan berdasarkan keputusan entitas dan bukti. Lengkapi delapan bagian, termasuk kontrak, imbalan kerja, penurunan nilai, komitmen dan kejadian setelah periode. Bila tidak berlaku, jelaskan kajian dan alasannya. Catatan tetap draft sampai tinjauan bisnis selesai. |
+
+Finance/Admin seluruh perusahaan dapat menyimpan draft; Manager/Direktur/Auditor membaca. Periode ditutup terkunci. Simpan memakai nomor versi; jika pengguna lain mengubah data, muat ulang untuk mencegah penimpaan. Excel memuat rincian aging/alokasi, PDF merangkum laporan dan CaLK. Nominal Excel berupa teks desimal presisi dua angka. Perubahan catatan/rencana, pemetaan akun, buku besar atau sumber rekonsiliasi membuat sign-off lama kedaluwarsa.
+
+**Penyesuaian berbukti.** Pada formulir jurnal penyesuaian tersedia panduan gaji/lembur, THR, BPJS/pajak, unbilled, chemical, penyusutan, penurunan nilai dan alokasi prepaid. Pemilihan panduan mewajibkan rujukan bukti dan menyimpan jurnal sebagai DRAFT. Finance tetap menentukan akun, tanggal, nominal dan perlakuan berdasarkan substansi; panduan tidak menghitung kewajiban pajak/gaji otomatis.
+
+**Tinjauan pemetaan rasio.** Buka Settings, tinjau klasifikasi akun, isi rujukan bukti dan centang konfirmasi sebelum menyimpan. Usulan kode/nama akun masih menunggu tinjauan dan nilai terkait ditandai SEMENTARA. Penjualan kredit tidak diisi otomatis. Usulan biaya tenaga kerja/chemical mengikuti nama akun dan perlu diperiksa substansinya. Formulir perusahaan umum mempertahankan pemetaan/tinjauan terkini; hanya panel tinjauan yang menulis stempel pemeriksa.
+
+**Panel kertas kerja sumber.** Tab jasa juga memuat analisis site dari kolom sumber jurnal yang dibukukan, umur sejak invoice pada register INV, rincian terbesar OPS_UTANG, UJI_PAYROLL, PROYEKSI_KAS dan perbandingan RAB tender. Tautan file dan nomor sheet/baris tersedia. Umur sejak invoice berbeda dari umur jatuh tempo kontrak. Selisih kecil tetap masuk saldo terbuka, dan penerimaan yang jumlah/tanggalnya ambigu dihitung sebagai baris belum lengkap. Panel RAB memakai indikasi nilai bulanan × bulan tanggal invoice yang teramati; tinjau kontrak sebelum memakai angka itu sebagai anggaran periode yang disetujui. Analisis sumber dan proyek ERP menjelaskan dua cakupan yang berbeda, sehingga totalnya tidak dijumlahkan.
+
+**Konfirmasi rekening koran.** Kecocokan tanggal/nominal merupakan kandidat pencocokan yang perlu diperiksa Finance. Setiap bulan perlu saldo awal/akhir, mutasi lengkap, kontinuitas dan konfirmasi cakupan. Gunakan Data unggahan untuk meninjau **BANK_STATEMENT_PERIOD** dan mencentang kelengkapan bulan berdasarkan koran asli. Akun bank yang bermutasi tetapi bersaldo akhir nol tetap harus direkonsiliasi. Bulan kosong tidak dianggap nol dan tidak diganti dengan bulan pertama yang tersedia.
+
+Finalisasi setiap perusahaan nyata memerlukan buku besar, daftar periksa, dasar kerangka, CaLK, rekonsiliasi dan dua penandatangan berbeda. Sistem tidak memberikan persetujuan Finance/Direksi atas nama pengguna. Catatan pengecualian hanya melalui tindakan berwenang yang tercatat pada audit.

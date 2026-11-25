@@ -19,6 +19,18 @@ This is the entry point for any coding agent (Claude Code, Codex, Cursor, …). 
 | [deploy/README.md](deploy/README.md) | Google Cloud runbook: topology, upgrade, backup, restore |
 | [WORK_PLAN_V3.md](WORK_PLAN_V3.md) | Latest work plan (v3: hierarchy, uploaded workbooks) and its status |
 | [LAPORAN_UJI_TUNTAS_V3.md](LAPORAN_UJI_TUNTAS_V3.md) | v3 data-quality and test report |
+| [WORK_PLAN_V4.md](WORK_PLAN_V4.md) | Current implementation and verification status |
+| [LAPORAN_UJI_TUNTAS_V4.md](LAPORAN_UJI_TUNTAS_V4.md) | Reconciliation, missing-data report and module cards |
+| [LAPORAN_DATA_V5.md](LAPORAN_DATA_V5.md) | Master-data v5: evaluation of AI-generated schema/audit docs, proven enrichment, UAT script |
+| [LAPORAN_KEUANGAN_V6.md](LAPORAN_KEUANGAN_V6.md) | v6: working-paper ledger for KBA 2026, reconciliation, management report and dashboards |
+| [LAPORAN_UJI_TUNTAS_V9.md](LAPORAN_UJI_TUNTAS_V9.md) | Current dashboard basis, service-cycle reports, source coverage, QA and handoff |
+| [WORK_PLAN_V9.md](WORK_PLAN_V9.md) | Current release checklist and evidence still pending |
+
+## Repository workflow required by the owner
+
+Before each logical change batch, `git fetch origin` and pull/merge current `main` without discarding local work. Use a feature branch. Run required checks, push all source changes and open a PR in `gunavault/kuncigroup`. Request review from and assign `gunavault`; do not merge your own PR. Never put private audit reports or source data in the public repository. Windows network credential helpers may require an approved shell; never print their output.
+
+`src/lib/operations/mini-dashboard.ts` contains complete scoped aggregates for all 19 modules. Cards do not use paginated results. Accounting renders them in its separate workspace too. Shared catalogs have `branchId=null`; employees, warehouses and assets retain physical branch scope. Data migration `202611190001_company_catalog_scope` preserves imported catalogs' source location and excludes manually verified branch catalogs.
 
 ## What this is
 
@@ -58,6 +70,7 @@ src/lib/accounting.ts    COA, journals, posting, reversal, period close
 src/lib/operations/      Module engine
   registry.ts              module + field definitions (19 modules)
   engine.ts                saveMaster / saveRecord / transitionRecord, the audit trail
+  approval.ts              approval matrix (OPS verify, Manager/Director/Admin limits), project quotas, NPWP
   stock.ts                 lots, FEFO, valuation
   read.ts                  scoped snapshots for the UI
   visibility.ts            company/branch/source scoping
@@ -65,6 +78,9 @@ src/lib/operations/      Module engine
   settings.ts              settings, password change
 src/lib/auth.ts          sessions, scrypt, CSRF origin check, currentActor
 src/lib/roles.ts         ADMIN > DIRECTOR > MANAGER > FINANCE/HR > SUPERVISOR > STAFF > EMPLOYEE, AUDITOR
+src/lib/service-report.ts As-of AR/AP, site profitability, labor, budgets and cash scenarios
+src/lib/service-plans.ts  Evidence-backed versioned drafts, analytic allocation and CaLK; no journal writes
+src/lib/operations/ledger-overview.ts Company ledger KPI basis, independent of imported documents
 src/lib/money.ts         Money as bigint cents. Never use floats for money.
 src/components/          Client UI (workspace, forms, scanner, settings)
 prisma/schema.prisma     Data model. Physical tables are snake_case via @@map (companies, business_records, …)
@@ -119,6 +135,10 @@ npm.cmd run build        # prisma generate + next build
   - Sessions are opaque tokens stored hashed, and the cookie is HttpOnly, Secure and SameSite=Strict.
 - **Workflow:**
   - Records go draft → submitted → approved (by a different person) → posted.
+  - With an approval policy in `company.settings.approval`, `verify` (OPS) is required before `approve`. The maker, verifier, approver and poster must be different people.
+  - `workflowKeys` (`opsVerifiedBy`, `approvalTier`, …) are written only by `transitionRecord` and stripped on save. Never accept them from the client.
+  - The Odoo requirements mapping is in [KAJIAN_PARITAS_ODOO_HANDOVER.md](KAJIAN_PARITAS_ODOO_HANDOVER.md).
+  - `company.settings.historicalLedger` marks a date window already booked from the accountant's working paper. Operational documents dated inside it must not post to the ledger (guarded in `transitionRecord`). Corrections go in as adjusting journals.
   - Nothing posts automatically, and imported data stays `IMPORTED` until a human verifies it.
 - **Source data:**
   - Empty is not zero, and formula errors stay errors. Never invent balances, GPS, timestamps or prices.
@@ -128,7 +148,7 @@ npm.cmd run build        # prisma generate + next build
 ## `scripts/` — read before running anything
 
 - **Maintained:**
-  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`.
+  - `local-db.ts`, `import-drive.ts`, `import-upload-v3.ts`, `workbook-reader.mjs`, `normalize-drive.mjs`, `prepare-upload-v3.mjs`, `enrich-master-v5.ts` (dry-run by default; `--apply` writes proven values only), `post-working-paper-kba-2026.ts` (dry-run by default; refuses to run twice), `import-bank-statement.ts` (bank statement workbook → BANK_STATEMENT facts; dry-run by default), `apply-ratio-mapping.ts` (automatic ratio account mapping; dry-run by default, keeps a Finance mapping unless `--replace`).
   - Report, verify and QA scripts: `report-import.ts`, `verify-*.ts`, `qa-*.{ts,mjs}`.
   - Smoke scripts (`smoke-*.ts`): they read the `SMOKE_URL` / `APP_PASSWORD` env vars.
 - **One-off patchers — DO NOT RUN.** These files string-replace code in `src/`, `prisma/schema.prisma` or `tests/`. They were already applied and re-running them corrupts code:
@@ -198,6 +218,8 @@ curl -s "https://context7.com/api/v2/context?libraryId=/vercel/next.js/v16.4.5&q
 The local copy of the Next.js docs in `node_modules/next/dist/docs/` is authoritative for the exact installed version.
 
 ## Known limits (not bugs)
+
+v9: `_service_plan:<periodId>` stores draft notes/plans in ModuleSetting. Changes invalidate business sign-offs. Only full-company Finance/Admin may save; closed periods are locked. Keep unmapped site balances explicit. Company-wide ledger cards must never leak to branch-scoped roles. Ratio mapping review stamps are server-owned and can only be written by `saveRatioMapping`; the general company form preserves the current mapping/review. Bank period coverage requires explicit Finance confirmation, including zero-net active bank accounts. Same-amount/date matches are candidates, not confirmation. `scripts/stage-source-findings.ts` and `scripts/review-invoice-revision-v7.ts` are dry-run by default, versioned and never post financial records. Do not re-run reviewed bank imports.
 
 These are out of scope unless the user asks:
 - No integrations yet: Odoo, bank, e-Faktur, payroll, fingerprint machines, IoT, email.

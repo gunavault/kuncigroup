@@ -24,13 +24,29 @@ export async function operationalInsights(
       : branches.length
         ? Prisma.sql`AND e.branch_id IN (${Prisma.join(branches)})`
         : Prisma.empty;
-  const values = financial
-    ? await db.$queryRaw<
-        { branchId: string | null; revenue: string; expense: string }[]
-      >(
-        Prisma.sql`SELECT e.branch_id AS "branchId", SUM(CASE WHEN a.category='PENDAPATAN' THEN l.credit-l.debit ELSE 0 END)::text AS revenue, SUM(CASE WHEN a.category='BEBAN' THEN l.debit-l.credit ELSE 0 END)::text AS expense FROM journal_entries e JOIN journal_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.company_id=${companyId} AND e.status='POSTED' AND e.type<>'CLOSING' AND e.transaction_date>=${start} AND e.transaction_date<${end} ${filter} GROUP BY e.branch_id`,
-      )
-    : [];
+  const ledger = (from: Date, to: Date) =>
+    db.$queryRaw<
+      { branchId: string | null; revenue: string; expense: string }[]
+    >(
+      Prisma.sql`SELECT e.branch_id AS "branchId", SUM(CASE WHEN a.category='PENDAPATAN' THEN l.credit-l.debit ELSE 0 END)::text AS revenue, SUM(CASE WHEN a.category='BEBAN' THEN l.debit-l.credit ELSE 0 END)::text AS expense FROM journal_entries e JOIN journal_lines l ON l.journal_entry_id=e.id JOIN chart_of_accounts a ON a.id=l.account_id WHERE e.company_id=${companyId} AND e.status='POSTED' AND e.type NOT IN ('CLOSING','OPENING') AND e.transaction_date>=${from} AND e.transaction_date<${to} ${filter} GROUP BY e.branch_id`,
+    );
+  let values = financial ? await ledger(start, end) : [];
+  let ledgerMonth = month,
+    ledgerBasis: "BULAN_BERJALAN" | "BULAN_TERAKHIR_TERSEDIA" = "BULAN_BERJALAN";
+  // No ledger activity this month yet: show the latest month that has postings, labelled as such.
+  if (financial && !values.length) {
+    const [latest] = await db.$queryRaw<{ d: Date | null }[]>(
+      Prisma.sql`SELECT MAX(e.transaction_date) AS d FROM journal_entries e WHERE e.company_id=${companyId} AND e.status='POSTED' AND e.type NOT IN ('CLOSING','OPENING') AND e.transaction_date<${end} ${filter}`,
+    );
+    if (latest?.d) {
+      const m = new Date(latest.d).toISOString().slice(0, 7),
+        from = new Date(m + "-01T00:00:00Z"),
+        to = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 1));
+      values = await ledger(from, to);
+      ledgerMonth = m;
+      ledgerBasis = "BULAN_TERAKHIR_TERSEDIA";
+    }
+  }
   const branchWhere = branchId
     ? { branchId }
     : branches.length
@@ -79,6 +95,8 @@ export async function operationalInsights(
   }
   return {
     month,
+    ledgerMonth,
+    ledgerBasis,
     financial,
     branches: values.map((v) => ({
       ...v,

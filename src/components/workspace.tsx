@@ -35,11 +35,19 @@ import {
   Layers3,
   Scale,
   ChartNoAxesCombined,
+  ClipboardList,
   X,
+  Landmark,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { rupiah, amount, cents } from "@/lib/money";
 import { JournalForm } from "./journal-form";
+import { ModuleMiniDashboard } from "./module-mini-dashboard";
+import { ManagementReportView } from "./management-report-view";
+import { FinancialTrace, type TraceSelection } from "./financial-trace";
+import { FinancialRatios } from "./financial-ratios";
+import { BankReconciliationView } from "./bank-reconciliation-view";
+import { ServiceReportView } from "./service-report-view";
 import type { snapshot } from "@/lib/accounting";
 type Data = Awaited<ReturnType<typeof snapshot>>;
 type Wire<T> = T extends Date
@@ -51,7 +59,7 @@ type Wire<T> = T extends Date
       : T extends object
         ? { [K in keyof T]: Wire<T[K]> }
         : T;
-export type State = Wire<Data>;
+export type State = Wire<Data> & { actor?: { id: string; role: string } };
 const nav = [
   ["Dashboard", LayoutDashboard],
   ["Master data & saldo awal", Layers3],
@@ -61,6 +69,9 @@ const nav = [
   ["Penyesuaian", SlidersHorizontal],
   ["Laporan keuangan", ChartNoAxesCombined],
   ["Tutup buku", LockKeyhole],
+  ["Laporan manajemen", ClipboardList],
+  ["Rekonsiliasi bank", Landmark],
+  ["Siklus jasa & CaLK", ClipboardList],
 ] as const;
 const date = (v: string) =>
   new Date(v).toLocaleDateString("id-ID", {
@@ -77,6 +88,7 @@ const typeNames: Record<string, string> = {
   REVERSING: "Pembalik",
 };
 export default function Workspace() {
+  const [trace, setTrace] = useState<TraceSelection | null>(null);
   const [email, setEmail] = useState("admin@kuncigroup.cloud");
   const [data, setData] = useState<State | null>(null),
     [page, setPage] = useState(0),
@@ -126,7 +138,12 @@ export default function Workspace() {
     }
   }
   useEffect(() => {
-    void load();
+    const p = new URL(window.location.href).searchParams;
+    void load(p.get("period") ?? "");
+    if (p.get("view") === "statements") setPage(6);
+    if (p.get("view") === "service") setPage(10);
+    if (p.get("view") === "ledger") { setPage(3); if (p.get("account")) setAccountId(p.get("account")!); }
+    if (p.get("journal")) setTrace({ statement: "JOURNAL", journal: p.get("journal")!, label: "Jurnal dari sumber" });
   }, []);
   async function act(body: unknown) {
     setBusy(true);
@@ -237,7 +254,7 @@ export default function Workspace() {
           {list.map((e) => (
             <tr key={e.id}>
               <td>
-                <strong>{e.journalNumber}</strong>
+                <button className="trace-link" onClick={() => setTrace({ statement: "JOURNAL", journal: e.id, label: e.journalNumber })}>{e.journalNumber}</button>
                 <span className="cell-sub">{e.description}</span>
               </td>
               <td>{date(String(e.transactionDate))}</td>
@@ -254,7 +271,7 @@ export default function Workspace() {
                   className={`badge ${e.status === "POSTED" ? "green" : "amber"}`}
                 >
                   <span className="dot" />
-                  {e.status === "POSTED" ? "Posted" : "Draft"}
+                  {{ POSTED: "Diposting", DRAFT: "Draft", REJECTED: "Ditolak", CANCELLED: "Dibatalkan" }[e.status]}
                 </span>
               </td>
               <td>
@@ -269,9 +286,11 @@ export default function Workspace() {
                     </a>
                   )}
                   {e.status === "DRAFT" && open && (
+                    <>
                     <button
                       title="Post jurnal"
                       className="icon-button"
+                      disabled={busy || !["ADMIN", "FINANCE"].includes(data?.actor?.role ?? "")}
                       onClick={() =>
                         void mutate(
                           { action: "post", id: e.id },
@@ -281,6 +300,11 @@ export default function Workspace() {
                     >
                       <Check size={16} />
                     </button>
+                    {(["reject", "cancel"] as const).map(action => <button key={action} className="icon-button" title={action === "reject" ? "Tolak draft" : "Batalkan draft"} disabled={busy || !["ADMIN", "FINANCE"].includes(data?.actor?.role ?? "") || (action === "reject" ? e.actorId === data?.actor?.id : e.actorId !== data?.actor?.id && data?.actor?.role !== "ADMIN")} onClick={() => {
+                      const reason = prompt(`${action === "reject" ? "Alasan penolakan" : "Alasan pembatalan"} (minimal 10 karakter)`);
+                      if (reason) void mutate({ action, id: e.id, reason }, action === "reject" ? "Draft ditolak; jejak audit disimpan." : "Draft dibatalkan; jejak audit disimpan.");
+                    }}>{action === "reject" ? <X size={16} /> : <Trash2 size={16} />}</button>)}
+                    </>
                   )}
                   {e.status === "POSTED" &&
                     ["GENERAL", "ADJUSTING"].includes(e.type) &&
@@ -352,22 +376,30 @@ export default function Workspace() {
         (!from || v.entry.transactionDate.slice(0, 10) >= from) &&
         (!to || v.entry.transactionDate.slice(0, 10) <= to),
     );
-  const chart = [
-    "01",
-    "03",
-    "05",
-    "08",
-    "12",
-    "16",
-    "20",
-    "24",
-    "28",
-    "31",
-  ].map((d) => {
+  // Cumulative revenue/expense: per day for a one-month period, per month for longer periods.
+  const periodStart = String(data?.period.startDate ?? "").slice(0, 10),
+    periodEnd = String(data?.period.endDate ?? "").slice(0, 10),
+    multiMonth = periodStart.slice(0, 7) !== periodEnd.slice(0, 7);
+  const buckets: { key: string; label: string }[] = multiMonth
+    ? (() => {
+        const out: { key: string; label: string }[] = [];
+        const d = new Date(periodStart.slice(0, 7) + "-01T00:00:00Z");
+        while (d.toISOString().slice(0, 7) <= periodEnd.slice(0, 7) && out.length < 36) {
+          out.push({
+            key: d.toISOString().slice(0, 7),
+            label: d.toLocaleDateString("id-ID", { month: "short", timeZone: "UTC" }),
+          });
+          d.setUTCMonth(d.getUTCMonth() + 1);
+        }
+        return out;
+      })()
+    : ["01", "03", "05", "08", "12", "16", "20", "24", "28", "31"].map((d) => ({ key: d, label: d }));
+  const chart = buckets.map(({ key, label }) => {
+    const d = key;
     let revenue = 0n,
       expense = 0n;
     for (const e of r?.entries ?? [])
-      if (e.transactionDate.slice(8, 10) <= d)
+      if ((multiMonth ? e.transactionDate.slice(0, 7) : e.transactionDate.slice(8, 10)) <= d)
         for (const l of e.lines) {
           if (l.account.category === "PENDAPATAN")
             revenue += cents(String(l.credit)) - cents(String(l.debit));
@@ -375,7 +407,7 @@ export default function Workspace() {
             expense += cents(String(l.debit)) - cents(String(l.credit));
         }
     return {
-      day: d,
+      day: label,
       pendapatan: Number(amount(revenue)),
       beban: Number(amount(expense)),
     };
@@ -540,6 +572,7 @@ export default function Workspace() {
             </div>
           ) : (
             <>
+              <ModuleMiniDashboard key={`${data.company.id}:${periodId}`} company={data.company.id} module="accounting" period={periodId} revision={data} />
               {page === 0 && (
                 <>
                   <div className="period-strip">
@@ -667,7 +700,14 @@ export default function Workspace() {
                               tickLine={false}
                               axisLine={false}
                               tick={{ fontSize: 11, fill: "#84918e" }}
-                              width={48}
+                              width={64}
+                              tickFormatter={(v: number) =>
+                                Math.abs(v) >= 1e9
+                                  ? `${(v / 1e9).toLocaleString("id-ID", { maximumFractionDigits: 1 })} M`
+                                  : Math.abs(v) >= 1e6
+                                    ? `${(v / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 1 })} jt`
+                                    : v.toLocaleString("id-ID")
+                              }
                             />
                             <Tooltip
                               formatter={(value) => rupiah(String(value))}
@@ -1002,7 +1042,7 @@ export default function Workspace() {
                         {ledgerRows.map((v, i) => (
                           <tr key={i}>
                             <td>{date(v.entry.transactionDate)}</td>
-                            <td>{v.entry.journalNumber}</td>
+                            <td><button className="trace-link" onClick={() => setTrace({ statement: "JOURNAL", account: accountId, journal: v.entry.id, label: v.entry.journalNumber })}>{v.entry.journalNumber}</button></td>
                             <td>{v.entry.description}</td>
                             <td className="num">
                               {rupiah(String(v.line.debit))}
@@ -1027,10 +1067,10 @@ export default function Workspace() {
                 <section className="panel">
                   <div className="panel-heading">
                     <div>
-                      <h2>Kertas kerja terpadu</h2>
+                      <h2>Neraca saldo sebelum penyesuaian, penyesuaian dan neraca saldo setelah penyesuaian (NSSP)</h2>
                       <p>
-                        Nilai sebelum dan penyesuaian bertanda positif untuk
-                        debit, negatif untuk kredit.
+                        Kolom Sebelum = neraca saldo belum disesuaikan; Penyesuaian = jurnal penyesuaian; Debit/Kredit NSSP = dasar laporan keuangan.
+                        Nilai sebelum dan penyesuaian bertanda positif untuk debit, negatif untuk kredit.
                       </p>
                     </div>
                     <a
@@ -1101,27 +1141,30 @@ export default function Workspace() {
                   <div className="report-grid">
                     <Statement
                       title="Laporan laba rugi"
+                      kind="PROFIT_LOSS" onTrace={setTrace}
                       items={[
-                        ["Pendapatan", r!.revenue],
-                        ["Beban", r!.expense],
+                        ["Pendapatan", r!.revenue, "revenue"],
+                        ["Beban", r!.expense, "expense"],
                       ]}
-                      total={["Laba / rugi bersih", r!.profit]}
+                      total={["Laba / rugi bersih", r!.profit, "profit"]}
                     />
                     <Statement
                       title="Perubahan modal"
+                      kind="EQUITY" onTrace={setTrace}
                       items={[
-                        ["Modal sebelum laba & prive", r!.capitalBefore],
-                        ["Laba bersih", r!.profit],
-                        ["Prive (dikurangkan)", r!.drawings],
+                        ["Modal sebelum laba & prive", r!.capitalBefore, "capitalBefore"],
+                        ["Laba bersih", r!.profit, "profit"],
+                        ["Prive (dikurangkan)", r!.drawings, "drawings"],
                       ]}
-                      total={["Modal akhir", r!.equity]}
+                      total={["Modal akhir", r!.equity, "equity"]}
                     />
                     <Statement
                       title="Posisi keuangan"
+                      kind="BALANCE" onTrace={setTrace}
                       items={[
-                        ["Total aset", r!.assets],
-                        ["Kewajiban", r!.liabilities],
-                        ["Ekuitas akhir", r!.equity],
+                        ["Total aset", r!.assets, "assets"],
+                        ["Kewajiban", r!.liabilities, "liabilities"],
+                        ["Ekuitas akhir", r!.equity, "equity"],
                       ]}
                       total={[
                         "Selisih Aset − Kewajiban − Ekuitas",
@@ -1130,21 +1173,35 @@ export default function Workspace() {
                     />
                     <Statement
                       title="Arus kas"
+                      kind="CASH_FLOW" onTrace={setTrace}
                       items={[
-                        ["Saldo kas awal", r!.cash.opening],
-                        ["Operasional", r!.cash.operating],
-                        ["Investasi", r!.cash.investing],
-                        ["Pendanaan", r!.cash.financing],
+                        ["Saldo kas awal", r!.cash.opening, "opening"],
+                        ["Operasional", r!.cash.operating, "operating"],
+                        ["Investasi", r!.cash.investing, "investing"],
+                        ["Pendanaan", r!.cash.financing, "financing"],
+                        ["Kas belum terklasifikasi", r!.cash.difference, "difference"],
                       ]}
-                      total={["Saldo kas akhir", r!.cash.ending]}
+                      total={["Saldo kas akhir", r!.cash.ending, "ending"]}
                     />
                   </div>
                   <div className="note">
-                    Laporan historis memakai jurnal sebelum penutupan. Angka
+                    Klik pos laporan untuk membuka akun, jurnal, dokumen dan bukti sumber; gunakan jejak navigasi untuk naik kembali. Laporan historis memakai jurnal sebelum penutupan. Angka
                     akuntansi dihitung dalam satuan sen; tampilan dan grafik
                     memformat hasilnya.
                   </div>
+                  <FinancialRatios company={data.company.id} period={data.period.id} onTrace={setTrace} />
                 </>
+              )}
+              {page === 9 && data && (
+                <BankReconciliationView company={data.company.id} periodId={data.period.id} onTrace={setTrace} />
+              )}
+              {page === 10 && data && <ServiceReportView company={data.company.id} periodId={data.period.id} onTrace={setTrace} />}
+              {page === 8 && data && (
+                <ManagementReportView
+                  company={data.company.id}
+                  periodId={periodId}
+                  onTrace={setTrace}
+                />
               )}
               {page === 7 && (
                 <>
@@ -1178,6 +1235,15 @@ export default function Workspace() {
                       </Button>
                     </div>
                   </section>
+                  <PostClosingTrialBalance
+                    rows={rows}
+                    closingLines={
+                      plan
+                        ? plan.flatMap((g) => g.lines)
+                        : journals.filter((e) => e.type === "CLOSING" && e.status === "POSTED").flatMap((e) => e.lines.map((l) => ({ accountId: l.accountId, debit: String(l.debit), credit: String(l.credit) })))
+                    }
+                    projected={Boolean(plan)}
+                  />
                   {plan && (
                     <section className="panel">
                       <div className="panel-heading">
@@ -1284,6 +1350,7 @@ export default function Workspace() {
           </footer>
         </main>
       </div>
+      {trace && data && <FinancialTrace key={`${data.company.id}-${data.period.id}-${JSON.stringify(trace)}`} company={data.company.id} period={data.period.id} selection={trace} onClose={() => setTrace(null)} />}
       {journalType && data && (
         <JournalForm
           type={journalType}
@@ -1304,23 +1371,65 @@ function Statement({
   title,
   items,
   total,
+  kind,
+  onTrace,
 }: {
   title: string;
   items: string[][];
   total: string[];
+  kind: string;
+  onTrace: (selection: TraceSelection) => void;
 }) {
   return (
     <section className="panel statement">
       <h2>{title}</h2>
-      {items.map(([label, value]) => (
+      {items.map(([label, value, metric]) => (
         <div className="statement-line" key={label}>
-          <span>{label}</span>
+          <button className="trace-link" onClick={() => onTrace({ statement: kind, metric, label })}>{label}</button>
           <strong>{rupiah(value)}</strong>
         </div>
       ))}
       <div className="statement-total">
-        <span>{total[0]}</span>
+        {total[2] ? <button className="trace-link" onClick={() => onTrace({ statement: kind, metric: total[2], label: total[0] })}>{total[0]}</button> : <span>{total[0]}</span>}
         <strong>{rupiah(total[1])}</strong>
+      </div>
+    </section>
+  );
+}
+
+/** Post-closing trial balance: adjusted balances plus closing entries; only real accounts may keep a balance. */
+function PostClosingTrialBalance({ rows, closingLines, projected }: { rows: { id: string; code: string; name: string; category: string; net: string }[]; closingLines: { accountId: string; debit: string; credit: string }[]; projected: boolean }) {
+  if (!closingLines.length) return null;
+  const signed = (v: string) => (v.startsWith("-") ? -cents(v.slice(1)) : cents(v));
+  const result = rows
+    .map((a) => {
+      const closing = closingLines.filter((l) => l.accountId === a.id).reduce((s, l) => s + cents(l.debit) - cents(l.credit), 0n);
+      return { ...a, after: signed(a.net) + closing };
+    })
+    .filter((a) => a.after !== 0n);
+  const nominal = result.filter((a) => a.category === "PENDAPATAN" || a.category === "BEBAN");
+  const debit = result.reduce((s, a) => s + (a.after > 0n ? a.after : 0n), 0n), credit = result.reduce((s, a) => s + (a.after < 0n ? -a.after : 0n), 0n);
+  return (
+    <section className="panel" aria-label="Neraca saldo penutup">
+      <div className="panel-heading">
+        <div>
+          <h2>Neraca saldo penutup {projected ? "(proyeksi setelah jurnal penutup)" : "(setelah jurnal penutup)"}</h2>
+          <p>
+            Hanya akun riil (aset, liabilitas, ekuitas) yang boleh bersaldo setelah penutupan.{" "}
+            {nominal.length ? `Perhatian: ${nominal.length} akun nominal masih bersaldo.` : "Seluruh akun nominal bersaldo nol."} Debit {rupiah(amount(debit))} · kredit {rupiah(amount(credit))}
+            {debit === credit ? " · seimbang." : " · TIDAK seimbang."}
+          </p>
+        </div>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead><tr><th>Akun</th><th className="num">Debit</th><th className="num">Kredit</th></tr></thead>
+          <tbody>
+            {result.map((a) => (
+              <tr key={a.id}><td><strong>{a.code}</strong> {a.name}</td><td className="num">{a.after > 0n ? rupiah(amount(a.after)) : ""}</td><td className="num">{a.after < 0n ? rupiah(amount(-a.after)) : ""}</td></tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );
