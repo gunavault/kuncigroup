@@ -114,6 +114,9 @@ test("withdrawal resets OPS/approval stamps; approved documents can be rejected 
 test("finalization supports reject, withdrawal, exception revocation and invalidates signoffs on ledger changes", async () => {
   const p = await db.fiscalPeriod.create({ data: { companyId: "A", name: "Finalization", startDate: new Date("2033-01-01Z"), endDate: new Date("2033-01-31Z") } });
   await db.company.update({ where: { id: "A" }, data: { settings: { historicalLedger: { periodId: p.id, from: "2033-01-01", through: "2033-01-31", source: "Test" } } } });
+  await createJournal({ ...base, periodId: p.id, date: "2033-01-01", type: "OPENING", lines: [line("cash", "0.01", "0"), line("equity", "0", "0.01")] }, finance.id);
+  const { saveServicePlan, emptyServicePlan, calkSections } = await import('../src/lib/service-plans');
+  await saveServicePlan(finance, { ...emptyServicePlan(), companyId: 'A', periodId: p.id, framework: 'SAK_EP', frameworkEvidence: 'Dasar kebijakan hanya untuk fixture uji terisolasi', notes: Object.fromEntries(calkSections.map(([key]) => [key, 'Catatan uji terisolasi untuk kebutuhan finalisasi.'])) });
   const go = (who: Actor, action: string, role?: string) => updateFinalization(who, "A", { action, periodId: p.id, role, note: "Diperiksa dan dicatat dengan alasan yang lengkap" });
   await go(finance, "signoff", "FINANCE"); await go(director, "reject"); assert.equal((await finalizationStatus("A", p.id)).signoffs.length, 0);
   await go(finance, "signoff", "FINANCE"); await go(director, "signoff", "DIRECTOR"); await go(finance, "withdrawSignoff", "FINANCE"); assert.equal((await finalizationStatus("A", p.id)).signoffs.length, 0);
@@ -123,5 +126,74 @@ test("finalization supports reject, withdrawal, exception revocation and invalid
   const stale = await finalizationStatus("A", p.id); assert.equal(stale.signoffs.length, 0); assert.equal(stale.staleSignoffs, 2);
   await assert.rejects(assertCloseAllowed(p.id)); await assert.rejects(closePeriod(p.id), /belum dapat ditutup/);
   await assert.rejects(go(actor("otherB", "ADMIN", "B"), "exception"));
+});
+test("automatic ratio proposals need Finance review, and bank-period coverage needs explicit confirmation", async () => {
+  const { saveRatioMapping } = await import('../src/lib/ratio-mapping-review');
+  const { reviewSource } = await import('../src/lib/operations/source-data');
+  const mapping = { currentAssetIds: ['cash', 'ar'], currentLiabilityIds: ['ap'], quickAssetIds: ['cash', 'ar'] };
+  const company = await db.company.findUniqueOrThrow({where:{id:'A'}});
+  await db.company.update({where:{id:'A'},data:{settings:{...(company.settings as Record<string, never>),accounting:{ratios:mapping}}}});
+  await db.auditEvent.create({data:{companyId:'A',action:'RATIO_MAPPING_AUTO',entityId:'A',details:{mapping}}});
+  const pending = await financialRatios(finance,'A','A'); assert.equal(pending.mappingPending,true);assert.equal(pending.ratios.find(r=>r.key==='current')!.value,null);
+  const input={companyId:'A',mapping,confirmed:true,note:'Klasifikasi diuji dalam fixture terisolasi'};
+  await assert.rejects(saveRatioMapping(actor('staff','STAFF'),input));
+  await assert.rejects(saveRatioMapping(finance,{...input,confirmed:false}));
+  await saveRatioMapping(finance,input);
+  const reviewed=await financialRatios(finance,'A','A');assert.equal(reviewed.mappingPending,false);assert.equal(reviewed.ratios.find(r=>r.key==='current')!.value,'5.55');
+  await db.sourceFact.create({data:{id:'bank-month',companyId:'A',kind:'BANK_STATEMENT_PERIOD',batchId:'batch',sourceKey:'bank-month',sourceFileId:'sourceA',sheet:'BANK',row:0,data:{month:'2032-01',opening:'0.00',closing:'0.00'}}});
+  const review={companyId:'A',id:'bank-month',note:'Kelengkapan koran bulan ini diuji pada fixture',decision:'REVIEW'};
+  await assert.rejects(reviewSource(actor('manager','MANAGER'),{...review,confirmCoverage:true}));
+  await assert.rejects(reviewSource(finance,review));
+  const count=await db.journalEntry.count();await reviewSource(finance,{...review,confirmCoverage:true});assert.equal(await db.journalEntry.count(),count);
+  assert.equal(((await db.sourceFact.findUniqueOrThrow({where:{id:'bank-month'}})).data as Record<string,unknown>).coverageConfirmed,true);
+});
+test("service reports reconcile as-of aging, source ledger cards, site allocation, plans and untouched journals", async () => {
+  const { serviceReport, ageBucket } = await import('../src/lib/service-report');
+  const { saveServicePlan, emptyServicePlan, calkSections } = await import('../src/lib/service-plans');
+  const { ledgerOverview } = await import('../src/lib/operations/ledger-overview');
+  const { moduleMiniDashboard } = await import('../src/lib/operations/mini-dashboard');
+  const { saveRatioMapping } = await import('../src/lib/ratio-mapping-review');
+  const p = await db.fiscalPeriod.create({ data: { companyId: 'A', name: 'Januari 2034', startDate: new Date('2034-01-01Z'), endDate: new Date('2034-01-31Z') } });
+  const feb = await db.fiscalPeriod.create({ data: { companyId: 'A', name: 'Februari 2034', startDate: new Date('2034-02-01Z'), endDate: new Date('2034-02-28Z') } });
+  await db.masterRecord.createMany({data:[{id:'svc-a',companyId:'A',kind:'PROJECT',code:'SVC-A',name:'Site A'},{id:'svc-b',companyId:'A',kind:'PROJECT',code:'SVC-B',name:'Site B'},{id:'svc-foreign',companyId:'B',kind:'PROJECT',code:'SVC-F',name:'Foreign site'}]});
+  await db.account.create({data:{id:'advance',code:'120',name:'Kasbon uji',category:'ASET',normalBalance:'DEBIT'}});
+  const company = await db.company.findUniqueOrThrow({where:{id:'A'}}), settings=company.settings as Record<string, unknown>;
+  await db.company.update({where:{id:'A'},data:{settings:{...settings,accounting:{receivable:'ar',payable:'ap',advance:'advance'}}}});
+  await saveRatioMapping(finance,{companyId:'A',confirmed:true,note:'Klasifikasi akun untuk fixture siklus jasa',mapping:{chemicalExpenseIds:['expense'],laborExpenseIds:['cogs']}});
+  const journal=(lines:ReturnType<typeof line>[],date='2034-01-10',periodId=p.id,type='GENERAL')=>createJournal({...base,periodId,date,type,lines},finance.id);
+  await journal([line('cash','100','0'),line('equity','0','100')],'2034-01-01',p.id,'OPENING');
+  const invoice=await journal([line('ar','120','0'),line('revenue','0','120')]);
+  const receipt=await journal([line('cash','50','0'),line('ar','0','50')],'2034-01-15');
+  await journal([line('ar','20','0'),line('revenue','0','20')]);
+  const chemical=await journal([line('expense','60','0'),line('cash','0','60')]);
+  await journal([line('cogs','30','0'),line('cash','0','30')]);
+  const future=await journal([line('cash','20','0'),line('ar','0','20')],'2034-02-15',feb.id);
+  await db.businessRecord.createMany({data:[
+    {id:'svc-inv',companyId:'A',module:'sales',number:'SVC-INV',title:'Invoice jasa',date:new Date('2034-01-10Z'),status:'POSTED',actorId:finance.id,journalId:invoice.id,amount:'120',settled:'70',data:{documentType:'INVOICE',dueDate:'2034-01-10',projectId:'svc-a'}},
+    {id:'svc-pay',companyId:'A',module:'payments',number:'SVC-PAY',title:'Pembayaran',date:new Date('2034-01-15Z'),status:'POSTED',actorId:finance.id,journalId:receipt.id,amount:'50',data:{direction:'RECEIVE',referenceId:'svc-inv'}},
+    {id:'svc-future',companyId:'A',module:'payments',number:'SVC-FUTURE',title:'Pembayaran berikutnya',date:new Date('2034-02-15Z'),status:'POSTED',actorId:finance.id,journalId:future.id,amount:'20',data:{direction:'RECEIVE',referenceId:'svc-inv'}},
+  ]});
+  const before=await serviceReport(finance,'A',p.id);
+  assert.equal(before.aging.ar.ledger,'90.00');assert.equal(before.aging.ar.detailTotal,'70.00');assert.equal(before.aging.ar.unallocated,'20.00');
+  assert.equal(before.aging.ar.rows[0].paid,'50.00','later payment and current settled field do not affect the as-of schedule');assert.equal(before.aging.ar.rows[0].bucket,'1_30');
+  assert.equal(before.cash.opening,'60.00');assert.equal(before.cash.complete,false);assert.equal(before.plan.framework,'UNCONFIRMED');
+  assert.equal(ageBucket('',p.endDate.toISOString().slice(0,10)),'UNKNOWN');assert.equal(ageBucket('2034-02-31','2034-01-31'),'UNKNOWN');
+  const overview=await ledgerOverview(finance,'A',undefined,p.id);assert.equal(overview.revenue,'140.00');assert.equal(overview.receivable,'90.00');assert.equal(overview.advance,'0.00');
+  assert.equal((await ledgerOverview(actor('staff','STAFF'),'A')).eligible,false);assert.equal((await ledgerOverview(actor('scoped','FINANCE','A',['branch']),'A')).eligible,false);
+  const cards=await moduleMiniDashboard(finance,'A','sales',{periodId:p.id});assert.equal(cards.cards.find(c=>c.key==='outstanding')!.value,'90.00');
+  const counts=await db.journalEntry.count(), original=JSON.stringify(await db.journalEntry.findUniqueOrThrow({where:{id:chemical.id},include:{lines:true}}));
+  const costLine=chemical.lines.find(l=>l.accountId==='expense')!.id;
+  const plan={...emptyServicePlan(),companyId:'A',periodId:p.id,framework:'SAK_EP',frameworkEvidence:'Kebijakan pelaporan khusus fixture pengujian',notes:Object.fromEntries(calkSections.map(([key])=>[key,'Catatan sumber fixture untuk pengujian fungsional.'])),budgets:[{projectId:'svc-a',category:'CHEMICAL',amount:'40.00',evidence:'RAB uji yang disetujui'}],cashPlans:[{date:'2034-02-01',direction:'OUT',category:'PAYROLL',projectId:'',amount:'100.00',evidence:'Payroll bruto dalam fixture'},{date:'2034-02-02',direction:'IN',category:'COLLECTION',projectId:'',amount:'50.00',evidence:'Jadwal penagihan fixture'}],allocations:[{lineId:costLine,projectId:'svc-a',amount:'30.00',evidence:'Bukti pemakaian chemical site A'},{lineId:costLine,projectId:'svc-b',amount:'30.00',evidence:'Bukti pemakaian chemical site B'}]};
+  await assert.rejects(saveServicePlan(actor('staff','STAFF'),plan));
+  await assert.rejects(saveServicePlan(finance,{...plan,allocations:[{...plan.allocations[0],amount:'60.01'}]}));
+  await assert.rejects(saveServicePlan(finance,{...plan,budgets:[{...plan.budgets[0],projectId:'svc-foreign'}]}));
+  await assert.rejects(saveServicePlan(finance,{...plan,cashPlans:[{...plan.cashPlans[0],date:'2034-01-20'}]}));
+  await saveServicePlan(finance,plan);await assert.rejects(saveServicePlan(finance,plan),/berubah/);
+  const afterReport=await serviceReport(finance,'A',p.id);assert.equal(afterReport.sites.reduce((sum,s)=>sum+signedCents(s.profit),0n),5000n);
+  assert.equal(afterReport.sites.find(s=>s.id==='svc-b')!.profit,'-30.00');assert.equal(afterReport.budgets[0].actual,'30.00');assert.equal(afterReport.budgets[0].variance,'10.00');
+  assert.equal(afterReport.labor.cost,'30.00');assert.equal(afterReport.labor.ratio,'21.43');assert.equal(afterReport.cash.plans[0].shortfall,'40.00');assert.equal(afterReport.cash.plans[1].balance,'10.00');
+  assert.equal(await db.journalEntry.count(),counts);assert.equal(JSON.stringify(await db.journalEntry.findUniqueOrThrow({where:{id:chemical.id},include:{lines:true}})),original,'analytical allocation never edits the posted journal');
+  await assert.rejects(serviceReport(finance,'B',p.id));await assert.rejects(serviceReport(actor('scoped','FINANCE','A',['branch']),'A',p.id));
+  await db.fiscalPeriod.update({where:{id:p.id},data:{status:'CLOSED'}});await assert.rejects(saveServicePlan(finance,{...plan,version:1}),/ditutup/);
 });
 after(async () => { await db.$disconnect(); await client.query(`DROP SCHEMA "${schema}" CASCADE`); await client.end(); });

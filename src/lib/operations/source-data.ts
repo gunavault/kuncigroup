@@ -35,7 +35,9 @@ export async function reviewSource(actor:Actor,input:unknown){
   let employeeId=row.employeeId;
   if(d.employeeId){if(!['ATTENDANCE','ATTENDANCE_SCAN','ATTENDANCE_SUMMARY'].includes(row.kind))throw new Error('Pemetaan karyawan khusus data absensi.');const e=await tx.masterRecord.findFirstOrThrow({where:{id:str(d.employeeId),companyId,kind:'EMPLOYEE'}});authorizeCompany(actor,companyId,undefined,e.branchId);employeeId=e.id;}
   const status=d.decision==='REJECT'?'REJECTED':'REVIEWED';
-  await tx.sourceFact.update({where:{id:row.id},data:{employeeId,status,data:json({...object(row.data),review:{note,actorId:actor.id,reviewer:actor.name,reviewedAt:new Date().toISOString(),decision:status}})}});
+  if(row.kind.startsWith('BANK_STATEMENT')&&!['ADMIN','FINANCE'].includes(role))throw new AccessError('Rekening koran ditinjau Finance atau Administrator.');
+  if(row.kind==='BANK_STATEMENT_PERIOD'&&status==='REVIEWED'&&d.confirmCoverage!==true)throw new Error('Konfirmasi kelengkapan seluruh bulan pada rekening koran sebelum menyetujui cakupan.');
+  await tx.sourceFact.update({where:{id:row.id},data:{employeeId,status,data:json({...object(row.data),...(row.kind==='BANK_STATEMENT_PERIOD'?{coverageConfirmed:status==='REVIEWED'&&d.confirmCoverage===true}:{}),review:{note,actorId:actor.id,reviewer:actor.name,reviewedAt:new Date().toISOString(),decision:status}})}});
   await tx.auditEvent.create({data:{companyId,actorId:actor.id,action:'SOURCE_REVIEWED',entityId:row.id,details:{status,note,employeeId}}});return {ok:true};
  });
 }

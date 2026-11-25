@@ -5,6 +5,7 @@ import { X, Trash2, Plus, Paperclip, Loader2, Check } from "lucide-react";
 import { Button } from "./ui/button";
 import { amount, cents, rupiah, validateLines } from "@/lib/money";
 import type { State } from "./workspace";
+import { adjustmentGuides } from "@/lib/adjustment-guides";
 type Values = {
   date: string;
   description: string;
@@ -29,6 +30,7 @@ export function JournalForm({
   onSave: (v: unknown) => Promise<void>;
 }) {
   const dialog = useRef<HTMLElement>(null);
+  const [guide, setGuide] = useState(""), [evidence, setEvidence] = useState("");
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const root = dialog.current;
@@ -66,6 +68,7 @@ export function JournalForm({
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { isSubmitting },
   } = useForm<Values>({
     defaultValues: {
@@ -149,6 +152,7 @@ export function JournalForm({
             try {
               await onSave({
                 ...v,
+                ...(guide ? { status: "DRAFT", description: `[${guide}] ${v.description} | Bukti: ${evidence}` } : {}),
                 periodId: data.period.id,
                 type,
                 attachmentId: attachment?.id,
@@ -159,6 +163,7 @@ export function JournalForm({
           })}
         >
           <div className="form-grid">
+            {type === "ADJUSTING" && <div className="full-width"><label>Keperluan penyesuaian jasa<select value={guide} onChange={e => { setGuide(e.target.value); if (e.target.value) setValue("status", "DRAFT"); }}><option value="">Penyesuaian umum</option>{adjustmentGuides.map(g => <option key={g.code} value={g.code}>{g.label}</option>)}</select></label>{guide && <><p className="note">{adjustmentGuides.find(g => g.code === guide)?.evidence} Formulir ini membuat draft untuk ditinjau. Isi akun dan angka dari bukti, bukan dari perkiraan otomatis.</p><label>Rujukan bukti penyesuaian<input required minLength={20} maxLength={250} value={evidence} onChange={e => setEvidence(e.target.value)} /></label></>}</div>}
             <label>
               Tanggal transaksi
               <input
@@ -182,6 +187,7 @@ export function JournalForm({
               <input
                 placeholder="Contoh: Penerimaan pembayaran pelanggan"
                 minLength={3}
+                maxLength={guide ? 650 : 1000}
                 required
                 {...register("description", { required: true })}
               />
@@ -299,7 +305,7 @@ export function JournalForm({
             </div>
           )}
           <div className="panel-footer">
-            <select aria-label="Status jurnal" {...register("status")}>
+            <select aria-label="Status jurnal" disabled={Boolean(guide)} {...register("status")}>
               <option value="POSTED">Post jurnal</option>
               <option value="DRAFT">Simpan draft</option>
             </select>

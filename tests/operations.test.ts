@@ -1318,6 +1318,10 @@ await test("Operational ERP integration", async (t) => {
       for (const [i, code, sev] of [[1, "T01", "T"], [2, "T02", "S"]] as const)
         await db.sourceFact.create({ data: { id: `fin-${code}`, companyId: "A", batchId: "uji", kind: "CONTROL", sourceKey: `uji-${code}`, sourceFileId: "uji", sheet: "TEMUAN", row: i, data: { cells: { "1": code, "2": `Temuan ${code}`, "4": sev, "7": "Finance", "8": "30-Nov-26" } } } });
       const go = (who: Actor, data: Record<string, unknown>) => updateFinalization(who, "A", { periodId: period.id, ...data });
+      const { saveServicePlan, emptyServicePlan, calkSections } = await import('../src/lib/service-plans');
+      const { createJournal } = await import('../src/lib/accounting');
+      await createJournal({ periodId: period.id, date: '2031-01-01', type: 'OPENING', description: 'Saldo uji terisolasi finalisasi', lines: [{ accountId: map.cash, debit: '0.01', credit: '0' }, { accountId: map.payable, debit: '0', credit: '0.01' }] }, fin.id);
+      await saveServicePlan(fin, { ...emptyServicePlan(), companyId: 'A', periodId: period.id, framework: 'SAK_EP', frameworkEvidence: 'Dasar keputusan kerangka pada fixture terisolasi', notes: Object.fromEntries(calkSections.map(([key]) => [key, 'Catatan penjelasan untuk uji finalisasi terisolasi.'])) });
       try {
         let s = await finalizationStatus("A", period.id);
         assert.equal(s.state, "DRAFT");

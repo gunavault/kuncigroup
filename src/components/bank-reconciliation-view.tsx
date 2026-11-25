@@ -73,11 +73,11 @@ export function BankReconciliationView({ company, periodId, onTrace }: { company
               <ul className="narrative">
                 {rec.breaks.map((b) => <li key={b.month}>Saldo awal koran {b.month} ({rupiah(String(b.opening))}) berbeda dengan saldo akhir bulan sebelumnya ({rupiah(String(b.previousClosing))}). Saldo koran di bawah dihitung dari mutasi; cocokkan dengan PDF bank.</li>)}
                 {rec.titleMismatches.map((t) => <li key={t}>Judul sheet tidak sesuai isinya: {t}.</li>)}
-                <li>Saldo awal koran {rupiah(rec.opening.statement)}; saldo awal buku akun ini {rupiah(rec.opening.book)} (saldo awal kertas kerja digabung di 11100).</li>
+                <li>Saldo awal koran {rec.opening.statement === null ? "belum tersedia" : rupiah(rec.opening.statement)}; saldo awal buku akun ini {rupiah(rec.opening.book)} (saldo awal kertas kerja digabung di 11100).</li>
               </ul>
             )}
             <div className="kpi-grid">
-              <div className="kpi"><span>Cocok</span><h2>{rec.totals.matched}</h2><small>{rupiah(rec.totals.matchedAmount)}</small></div>
+              <div className="kpi"><span>Kandidat cocok · perlu verifikasi</span><h2>{rec.totals.matched}</h2><small>{rupiah(rec.totals.matchedAmount)}</small></div>
               <div className="kpi"><span>Hanya di koran (belum dibukukan)</span><h2>{rec.totals.statementOnly}</h2><small>neto {rupiah(rec.totals.statementOnlyAmount)}</small></div>
               <div className="kpi"><span>Hanya di buku (tidak ada di koran)</span><h2>{rec.totals.bookOnly}</h2><small>neto {rupiah(rec.totals.bookOnlyAmount)}</small></div>
             </div>

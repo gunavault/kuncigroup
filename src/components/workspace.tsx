@@ -47,6 +47,7 @@ import { ManagementReportView } from "./management-report-view";
 import { FinancialTrace, type TraceSelection } from "./financial-trace";
 import { FinancialRatios } from "./financial-ratios";
 import { BankReconciliationView } from "./bank-reconciliation-view";
+import { ServiceReportView } from "./service-report-view";
 import type { snapshot } from "@/lib/accounting";
 type Data = Awaited<ReturnType<typeof snapshot>>;
 type Wire<T> = T extends Date
@@ -70,6 +71,7 @@ const nav = [
   ["Tutup buku", LockKeyhole],
   ["Laporan manajemen", ClipboardList],
   ["Rekonsiliasi bank", Landmark],
+  ["Siklus jasa & CaLK", ClipboardList],
 ] as const;
 const date = (v: string) =>
   new Date(v).toLocaleDateString("id-ID", {
@@ -138,6 +140,9 @@ export default function Workspace() {
   useEffect(() => {
     const p = new URL(window.location.href).searchParams;
     void load(p.get("period") ?? "");
+    if (p.get("view") === "statements") setPage(6);
+    if (p.get("view") === "service") setPage(10);
+    if (p.get("view") === "ledger") { setPage(3); if (p.get("account")) setAccountId(p.get("account")!); }
     if (p.get("journal")) setTrace({ statement: "JOURNAL", journal: p.get("journal")!, label: "Jurnal dari sumber" });
   }, []);
   async function act(body: unknown) {
@@ -1190,6 +1195,7 @@ export default function Workspace() {
               {page === 9 && data && (
                 <BankReconciliationView company={data.company.id} periodId={data.period.id} onTrace={setTrace} />
               )}
+              {page === 10 && data && <ServiceReportView company={data.company.id} periodId={data.period.id} onTrace={setTrace} />}
               {page === 8 && data && (
                 <ManagementReportView
                   company={data.company.id}

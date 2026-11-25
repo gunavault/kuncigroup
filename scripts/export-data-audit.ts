@@ -17,6 +17,7 @@ try {
     sources: await tx.sourceFile.findMany({ select: { id: true, companyId: true, name: true, sha256: true, rowCount: true, status: true, notes: true } }),
     batches: await tx.dataImportBatch.findMany(),
     moduleSettings: await tx.moduleSetting.findMany({ where: { key: "_finalization" }, select: { companyId: true, settings: true } }),
+    automaticRatioCompanies: await tx.auditEvent.findMany({ where: { action: "RATIO_MAPPING_AUTO" }, select: { companyId: true }, distinct: ["companyId"] }),
     users: await tx.user.findMany({ select: { id: true, name: true, active: true, mustChangePassword: true, grants: { select: { companyId: true, branchIds: true, role: true, managerId: true, employeeId: true, active: true } } } }),
   }), { isolationLevel: "RepeatableRead", timeout: 120000 });
   mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, JSON.stringify(data));

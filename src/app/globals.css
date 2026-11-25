@@ -2172,5 +2172,12 @@ tr.total td { font-weight: 700; border-top: 1px solid rgba(18, 59, 54, 0.25); }
 .ratio-card h3 { font-size: 14px; margin: 7px 0 12px; }.ratio-card>strong { font-size: 22px; color: #175b49; }
 .ratio-card>small { font-size: 11px; color: #64748b; }.ratio-card p { font-size: 12px; line-height: 1.6; margin: 12px 0; }
 .ratio-reason { color: #965200; }.ratio-card summary { color: #176550; font-size: 12px; cursor: pointer; }
+.service-tabs { display:flex;flex-wrap:wrap;gap:8px;padding:0 20px 18px; }
+.service-filters { display:flex;flex-wrap:wrap;gap:18px;padding:14px 20px; }.service-filters label { min-width:200px;flex:1; }
+.service-summary { padding:0 20px 20px; }.service-summary h2 { font-size:clamp(17px,1.5vw,23px);overflow-wrap:anywhere; }
+.service-plan-row { display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;padding:15px 0;border-bottom:1px solid #e1e8e6;margin-bottom:12px; }
+.service-report fieldset { border:1px solid #dbe6e2;border-radius:8px;padding:16px;min-width:0; }.service-report fieldset>label { margin-bottom:14px; }
+.service-report textarea { min-height:100px; }.service-report .form-grid { padding:18px 20px; }.service-report { min-width:0; }
+@media(max-width:600px){ .service-tabs { padding:0 12px 12px; }.service-tabs .button { font-size:12px; }.service-summary { grid-template-columns:1fr; }.service-plan-row { grid-template-columns:1fr; } }
 @media(max-width:600px){ .module-mini-card.money-card { grid-column: 1 / -1; }.module-mini-card.money-card strong { white-space: nowrap; font-size: clamp(16px,4.3vw,23px); } }
 @media(max-width:600px){ .trace-backdrop { padding: 6px; }.trace-dialog { max-height: 98dvh; }.trace-body { padding: 12px; }.trace-breadcrumb { padding: 0 12px 10px; font-size: 12px; } }

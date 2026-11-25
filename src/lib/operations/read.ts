@@ -7,6 +7,7 @@ import { modules, definitions, masterDefinitions } from "./registry";
 import {userDirectory} from './users';
 import {assignedRole} from '../auth';
 import { masterBranchScope } from './master-scope';
+import { ledgerOverview } from "./ledger-overview";
 export async function operationSnapshot(
   actor: Actor,
   companyId: string,
@@ -199,6 +200,7 @@ export async function operationSnapshot(
   return {
     assignedRole:assignedRole(actor,companyId),
     insights: await operationalInsights(actor, companyId, options.branchId),
+    ledgerOverview: await ledgerOverview(actor, companyId, options.branchId),
     permissions: {
       companyWide: !branches.length,
       sourceAccess,

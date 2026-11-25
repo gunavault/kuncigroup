@@ -69,7 +69,7 @@ await db.$transaction(async (tx) => {
         id: `${sourceFileId}:${s.month}:${l.row}`, companyId, batchId, kind: "BANK_STATEMENT", sourceKey: `${sourceFileId}:${s.month}:${l.row}`, sourceFileId,
         sheet: s.title, row: l.row, effectiveDate: new Date(`${l.date}T00:00:00Z`), accountId: account.id,
         debit: amount(l.inflow), credit: amount(l.outflow), amount: amount(l.balance), status: "VALIDATED",
-        data: { accountCode, bank, description: l.description, printedBalance: amount(l.balance), computedBalance: amount(l.computedBalance) } as Prisma.InputJsonValue,
+        data: { accountCode, bank, description: l.description, printedBalance: amount(l.balance), computedBalance: l.computedBalance === null ? null : amount(l.computedBalance) } as Prisma.InputJsonValue,
       });
   }
   await tx.sourceFact.createMany({ data: facts });

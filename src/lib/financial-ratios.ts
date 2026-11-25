@@ -6,6 +6,7 @@ import { object } from "./operations/shared";
 import { groupOf } from "./management-report";
 import { requireFinancialScope } from "./financial-trace";
 import type { Actor } from "./auth";
+import { ratioMappingHash } from "./ratio-mapping-review";
 
 type Trace = { statement: string; metric: string; account?: string; entryType?: string };
 export type Ratio = {
@@ -26,11 +27,15 @@ export async function financialRatios(actor: Actor, companyId: string, periodId:
     const period = await tx.fiscalPeriod.findFirstOrThrow({ where: { id: periodId, companyId } });
     const company = await tx.company.findUniqueOrThrow({ where: { id: companyId } });
     const r = await reports(tx, period.id), config = object(object(company.settings).accounting), mapping = object(config.ratios);
+    const automatic = await tx.auditEvent.findFirst({ where: { companyId, action: "RATIO_MAPPING_AUTO" }, orderBy: { createdAt: "desc" }, select: { id: true } });
+    const review = object(config.ratioMappingReview), verified = review.status === "VERIFIED" && review.hash === ratioMappingHash(mapping);
+    const mappingPending = !verified && (Boolean(automatic) || review.status === "PENDING" || review.status === "VERIFIED");
     const maps = await tx.$queryRaw<{ code: string; g: string | null }[]>(Prisma.sql`SELECT DISTINCT data->>'accountCode' AS code, data->>'16' AS g FROM source_facts WHERE "companyId"=${companyId} AND kind='FINANCIAL_JOURNAL'`);
     const groups = new Map(maps.filter(x => x.code && x.g).map(x => [x.code, String(x.g)]));
     const net = (ids: Set<string>, opening = false) => r.entries.filter(e => !opening || e.type === "OPENING").reduce((sum, e) => sum + e.lines.filter(l => ids.has(l.accountId)).reduce((s, l) => s + signedCents(l.debit) - signedCents(l.credit), 0n), 0n);
     const mapped = (key: string, category: string, credit = false, opening = false): bigint | null => {
       const ids = mapping[key];
+      if (mappingPending) return null;
       if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length || ids.some(id => typeof id !== "string" || !r.rows.some(a => a.id === id && a.category === category))) return null;
       return net(new Set(ids.map(String)), opening) * (credit ? -1n : 1n);
     };
@@ -100,8 +105,9 @@ export async function financialRatios(actor: Actor, companyId: string, periodId:
       dso: [...mappedTraces("creditSalesRevenueIds", "Penjualan kredit"), ...mappedTraces("receivableIds", "Piutang akhir"), ...mappedTraces("receivableIds", "Piutang awal").map(t => ({ ...t, entryType: "OPENING" }))],
       interestCoverage: [pnl, trace("PROFIT_LOSS", "PAJAK", "Pajak penghasilan"), ...mappedTraces("interestExpenseIds", "Beban bunga")],
     };
-    ratios.forEach(ratio => { ratio.traces = links[ratio.key] ?? []; });
+    ratios.forEach(ratio => { ratio.traces = links[ratio.key] ?? []; if (mappingPending && ["current", "quick", "cashRatio", "debtEquity", "inventoryTurnover", "dio", "dso", "interestCoverage"].includes(ratio.key)) { ratio.value = null; ratio.reason = "Usulan pemetaan otomatis belum ditinjau Finance atau pemetaan telah berubah setelah tinjauan. Buka Pengaturan → Tinjauan pemetaan rasio."; } });
     return { company: { id: company.id, name: company.name }, period: { id: period.id, name: period.name }, basis, ratios,
-      notes: ["Rasio bersifat analitis dan mengikuti kualitas serta status finalisasi buku besar. Nilai negatif tetap ditampilkan bila penyebut positif.", "Tidak ada ambang industri universal. Perbandingan harus memakai sektor, metode, dan periode yang sepadan.", `${imports} dokumen impor dikecualikan dari tingkat penyelesaian workflow. Kasbon adalah kohor tanggal pengajuan pada periode ini, dengan penyelesaian terkini.`] };
+      mappingPending,
+      notes: [mappingPending ? "Pemetaan akun otomatis masih merupakan usulan. Finance perlu meninjau likuiditas, tenor, bunga dan pemisahan penjualan kredit di Pengaturan; rasio yang bergantung padanya belum dihitung." : "Pemetaan rasio mengikuti klasifikasi akun yang tersimpan; tinjau jika kebijakan atau substansi akun berubah.", "Rasio bersifat analitis dan mengikuti kualitas serta status finalisasi buku besar. Nilai negatif tetap ditampilkan bila penyebut positif.", "Tidak ada ambang industri universal. Perbandingan harus memakai sektor, metode, dan periode yang sepadan.", `${imports} dokumen impor dikecualikan dari tingkat penyelesaian workflow. Kasbon adalah kohor tanggal pengajuan pada periode ini, dengan penyelesaian terkini.`] };
   }, { isolationLevel: "RepeatableRead", timeout: 60000 });
 }

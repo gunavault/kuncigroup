@@ -7,6 +7,8 @@ export const ratioMappingFields = [
   { key: "receivableIds", label: "Piutang usaha untuk DSO", category: "ASET" },
   { key: "creditSalesRevenueIds", label: "Pendapatan khusus penjualan kredit (neto)", category: "PENDAPATAN" },
   { key: "interestExpenseIds", label: "Beban bunga untuk interest coverage", category: "BEBAN" },
+  { key: "laborExpenseIds", label: "Biaya tenaga kerja (gaji, lembur, THR, BPJS)", category: "BEBAN" },
+  { key: "chemicalExpenseIds", label: "Beban pemakaian chemical / perlengkapan", category: "BEBAN" },
 ] as const;
 export function validateRatioMapping(value: unknown, accounts: { id: string; category: string }[]) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Pemetaan rasio tidak valid.");
@@ -43,8 +45,10 @@ export function suggestRatioMapping(accounts: { id: string; code: string; name: 
     interestBearingDebtIds: pick((a) => a.category === "KEWAJIBAN" && /pinjaman|pembiayaan|bank|leasing|kredit/i.test(a.name)),
     inventoryIds: pick((a) => a.category === "ASET" && /persediaan/i.test(a.name)),
     receivableIds: pick((a) => a.category === "ASET" && /piutang (usaha|dagang)/i.test(a.name)),
-    creditSalesRevenueIds: pick((a) => a.category === "PENDAPATAN" && a.code.startsWith("4") && !/retur|potongan/i.test(a.name)),
+    creditSalesRevenueIds: [], // The account name/range does not prove that all sales are on credit.
     interestExpenseIds: pick((a) => a.category === "BEBAN" && /bunga/i.test(a.name) && !/pajak/i.test(a.name)),
+    laborExpenseIds: [],
+    chemicalExpenseIds: [],
   };
   return validateRatioMapping(mapping, accounts);
 }

@@ -1,14 +1,15 @@
 import { Prisma } from "@prisma/client";
 import { db } from "../db";
 import { authorizeCompany, allowedBranches, AccessError, type Actor } from "../auth";
-import { amount, signedCents } from "../money";
+import { amount, signedCents, rupiah } from "../money";
 import { modules } from "./registry";
 import { masterBranchScope } from "./master-scope";
 import { sourceScope } from "./source-data";
 import { userDirectory } from "./users";
+import { ledgerOverview } from "./ledger-overview";
 
 export type MetricCard = { key: string; label: string; value: string | null; format: "count" | "money"; detail: string };
-export type MiniDashboard = { module: string; scope: string; cards: MetricCard[]; updatedAt: string };
+export type MiniDashboard = { module: string; scope: string; cards: MetricCard[]; updatedAt: string; sourceNote?: string };
 const count = (key: string, label: string, value: number | null, detail = "Seluruh data dalam cakupan akses"): MetricCard => ({ key, label, value: value === null ? null : String(value), format: "count", detail });
 const money = (key: string, label: string, value: bigint | null, detail: string): MetricCard => ({ key, label, value: value === null ? null : amount(value), format: "money", detail });
 
@@ -17,6 +18,7 @@ export async function moduleMiniDashboard(actor: Actor, companyId: string, modul
   options: { branchId?: string; query?: string; periodId?: string; asOf?: Date } = {}): Promise<MiniDashboard> {
   const role = authorizeCompany(actor, companyId, undefined, options.branchId);
   if (!modules.some(m => m.key === module)) throw new Error("Modul tidak tersedia.");
+  const period = options.periodId ? await db.fiscalPeriod.findFirstOrThrow({ where: { id: options.periodId, companyId } }) : null;
   const branches = allowedBranches(actor, companyId), own = role === "STAFF";
   const branch = options.branchId ? { branchId: options.branchId } : branches.length ? { branchId: { in: branches } } : {};
   const q = options.query?.trim().slice(0, 150);
@@ -29,6 +31,7 @@ export async function moduleMiniDashboard(actor: Actor, companyId: string, modul
   } });
   const now = options.asOf ?? new Date();
   let cards: MetricCard[];
+  let sourceNote: string | undefined;
   const hrModules = ["employees", "attendances", "timesheets", "project", "quality", "discuss", "apps", "settings"];
   // A hidden module must not become a side channel for aggregate financial data.
   if (role === "HR" && !hrModules.includes(module)) throw new AccessError("Modul di luar akses HR.");
@@ -69,6 +72,15 @@ export async function moduleMiniDashboard(actor: Actor, companyId: string, modul
       masterCount("ASSET", { active: true }),
     ]);
     cards = [count("products", "Produk aktif", products), count("locations", "Gudang aktif", locations), count("lots", "Lot bersaldo", lots, "Jumlah lot; kuantitas dengan satuan berbeda tidak dijumlahkan"), count("quarantine", "Lot karantina", quarantine), count("expired", "Lot kedaluwarsa", expired), count("assets", "Register aset aktif", assets, "Baris register dapat mewakili lebih dari satu unit")];
+    const stockSource = { AND: [sourceScope(actor, companyId, options.branchId).where, { kind: "STOCK_SNAPSHOT" }, ...(q ? [{ productId: lotWhere.productId }] : [])] } as Prisma.SourceFactWhereInput;
+    const sourceRows = await db.sourceFact.count({ where: stockSource });
+    if (!lots && sourceRows) {
+      const pending = await db.sourceFact.count({ where: { AND: [stockSource, { status: { not: "REVIEWED" } }] } });
+      cards[2] = count("sourceStock", "Baris saldo stok sumber", sourceRows, "Buka Data unggahan untuk kuantitas per produk/gudang. Satuan berbeda tidak dijumlahkan.");
+      cards[3] = count("lots", "Lot operasional bersaldo", 0, "Belum ada saldo lot yang dibuka dan diposting; bukan pernyataan bahwa stok fisik nihil.");
+      cards[4] = count("sourceReview", "Sumber stok perlu tinjauan", pending, "Pastikan stok fisik, biaya unit dan tanggal/lot sebelum membuka saldo. Kondisi karantina/kedaluwarsa belum dapat dinilai.");
+      sourceNote = "Register stok sumber sudah tersedia. Saldo lot dan valuasi operasional menunggu bukti fisik serta persetujuan Finance; kosong tidak dianggap nol.";
+    }
   } else if (module === "apps") {
     const settings = await db.moduleSetting.findMany({ where: { companyId } });
     const enabled = new Set(modules.filter(m => settings.find(s => s.key === m.key)?.enabled !== false).map(m => m.key));
@@ -80,7 +92,6 @@ export async function moduleMiniDashboard(actor: Actor, companyId: string, modul
     const hasAccess = (u: typeof users[number]) => u.isSuperuser || u.grants.some(g => g.companyId === companyId && g.active);
     cards = [count("users", "Pengguna perusahaan", permitted ? users.length : null), count("active", "Akun aktif", permitted ? users.filter(u => u.active && hasAccess(u)).length : null), count("inactive", "Akses nonaktif", permitted ? users.filter(u => !u.active || !hasAccess(u)).length : null), count("reset", "Wajib ganti sandi", permitted ? users.filter(u => u.mustChangePassword).length : null), count("branches", "Cabang aktif", await db.branch.count({ where: { companyId, active: true, ...(options.branchId ? { id: options.branchId } : branches.length ? { id: { in: branches } } : {}) } }))];
   } else if (module === "accounting" || module === "dashboards") {
-    const period = options.periodId ? await db.fiscalPeriod.findFirstOrThrow({ where: { id: options.periodId, companyId } }) : null;
     const where: Prisma.JournalEntryWhereInput = { companyId, ...branch, ...(period ? { fiscalPeriodId: period.id } : {}), ...(q ? { OR: [{ journalNumber: { contains: q, mode: "insensitive" } }, { description: { contains: q, mode: "insensitive" } }] } : {}) };
     if (!financial) cards = [count("posted", "Jurnal terposting", null), count("draft", "Draft jurnal", null), money("debit", "Total debit", null, "Memerlukan akses keuangan"), money("credit", "Total kredit", null, "Memerlukan akses keuangan"), money("balance", "Selisih jurnal", null, "Memerlukan akses keuangan")];
     else {
@@ -102,6 +113,7 @@ export async function moduleMiniDashboard(actor: Actor, companyId: string, modul
     }
   } else {
     const where: Prisma.BusinessRecordWhereInput = { companyId, ...branch, module,
+      ...(period ? { date: { gte: period.startDate, lte: period.endDate } } : {}),
       ...(own ? { actorId: actor.id } : {}), ...(q ? { OR: [{ number: { contains: q, mode: "insensitive" } }, { title: { contains: q, mode: "insensitive" } }] } : {}) };
     const grouped = await db.businessRecord.groupBy({ by: ["status"], where, _count: true });
     const n = (status: string) => grouped.find(g => g.status === status)?._count ?? 0;
@@ -111,16 +123,31 @@ export async function moduleMiniDashboard(actor: Actor, companyId: string, modul
       const sum = aggregate ? signedCents(aggregate._sum.amount ?? "0") : null;
       const outstanding = aggregate ? sum! - signedCents(aggregate._sum.settled ?? "0") : null;
       cards[3] = module === "pos" ? money("postedValue", "Penjualan bruto terposting", sum, "Hanya dokumen POSTED yang memiliki jurnal") : money("outstanding", "Saldo belum diselesaikan", outstanding, "Hanya dokumen POSTED yang memiliki jurnal; quotation/order dikecualikan");
+      if (n("IMPORTED") && financial) {
+        const imported = await db.businessRecord.aggregate({ where: { ...where, status: "IMPORTED" }, _sum: { amount: true } });
+        const recorded = signedCents(imported._sum.amount ?? "0");
+        sourceNote = `${n("IMPORTED")} dokumen impor; nilai tercatat ${rupiah(amount(recorded))}. Angka sumber ini belum merupakan saldo invoice/kasbon terverifikasi dan tidak ditambahkan ke buku besar.`;
+      }
+      if (["sales", "cash-advance"].includes(module) && !q) {
+        const ledger = await ledgerOverview(actor, companyId, options.branchId, options.periodId);
+        if (ledger.available && ledger.historical) {
+          cards[3] = money("outstanding", module === "sales" ? "Piutang akun kontrol" : "Saldo akun kasbon", module === "sales" ? ledger.receivable === null ? null : signedCents(ledger.receivable) : ledger.advance === null ? null : signedCents(ledger.advance), ledger.basis);
+          cards[4] = count("ledgerPosted", "Jurnal perusahaan terposting", ledger.journals, `${ledger.period?.name} · seluruh jenis transaksi perusahaan. Dokumen ${module} operasional terposting: ${n("POSTED")}.`);
+        } else if (ledger.eligible && !ledger.available && n("IMPORTED")) {
+          cards[3] = money("outstanding", "Saldo terverifikasi belum tersedia", null, "Sumber impor tersedia, tetapi belum ada buku besar yang dapat membuktikan saldo. Tinjau sumber dan akun kontrol.");
+        }
+      }
     }
     if (module === "attendances") {
       const source = sourceScope(actor, companyId, options.branchId).where;
-      const sourceWhere: Prisma.SourceFactWhereInput = { AND: [source, { kind: "ATTENDANCE" }] };
+      const sourceWhere: Prisma.SourceFactWhereInput = { AND: [source, { kind: "ATTENDANCE" }, ...(period ? [{ effectiveDate: { gte: period.startDate, lte: period.endDate } }] : [])] };
       // Source cards describe a separate register, not a second count of operational documents.
-      cards[4] = count("sourceDays", "Hari absensi sumber", await db.sourceFact.count({ where: sourceWhere }), "Register sumber; seluruh tanggal; filter teks dokumen tidak berlaku");
+      cards[4] = count("sourceDays", "Hari absensi sumber", await db.sourceFact.count({ where: sourceWhere }), `Register sumber; ${period ? period.name : "seluruh tanggal"}; filter teks dokumen tidak berlaku`);
       cards[5] = count("sourceReview", "Hari sumber perlu tinjauan", await db.sourceFact.count({ where: { AND: [sourceWhere, { status: { in: ["REVIEW", "IMPORTED", "UNKNOWN", "UNMATCHED"] } }] } }), "Tidak dijumlahkan dengan dokumen operasional");
     }
     if (module === "manufacturing") cards[5] = count("bom", "Resep / BOM aktif", await masterCount("BOM", { active: true }));
     if (module === "project") cards[5] = count("projects", "Master proyek aktif", await masterCount("PROJECT", { active: true }));
   }
-  return { module, scope: `${options.branchId ? "Cabang terpilih" : branches.length ? "Cabang dalam hak akses" : "Seluruh perusahaan"}${own ? " · dokumen saya" : ""} · ${options.periodId ? "periode terpilih" : "seluruh periode"}${q && !["apps", "settings"].includes(module) ? " · sesuai pencarian" : ""}`, cards, updatedAt: now.toISOString() };
+  const register = ["inventory", "barcode", "employees", "apps", "settings", "discuss"].includes(module);
+  return { module, scope: `${options.branchId ? "Cabang terpilih" : branches.length ? "Cabang dalam hak akses" : "Seluruh perusahaan"}${own ? " · dokumen saya" : ""} · ${register ? "register terkini" : period ? period.name : "seluruh periode"}${q && !["apps", "settings"].includes(module) ? " · sesuai pencarian" : ""}`, cards, updatedAt: now.toISOString(), ...(sourceNote ? { sourceNote } : {}) };
 }
