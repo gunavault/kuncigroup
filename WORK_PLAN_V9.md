@@ -32,4 +32,4 @@ Pekerjaan Codex yang belum di-commit disalin utuh ke worktree terpisah (`feat/v9
 | 4. Rekonsiliasi bank & tinjauan pemetaan | Kontrol v8 dipertahankan; rasio tampil SEMENTARA sampai Finance meninjau |
 | 5. Uji | typecheck; 103/103 test; build produksi; QA lokal v9 7/7, v8 4/4, v7 5/5, v6 7/7 |
 | 6. Rekap kekosongan Excel/PPT | Belum diperbarui |
-| 7. Deploy | Menunggu persetujuan pemilik |
+| 7. Deploy | Selesai 25 Nov 2026 (rilis `v9-122ac95`) atas persetujuan pemilik: cek drift bersih, backup pra/pasca rilis OK, 103/103 test di VM, build lulus; RAB KLHK & Skadron 17 diimpor sebagai data sumber; usulan pemetaan rasio diperbarui (status tetap usulan, belum ada tinjauan Finance yang ditimpa); PAT publik read-only v9 7/7, v8 4/4, v7 5/5, v6 7/7. Tidak ada jurnal yang diposting |
