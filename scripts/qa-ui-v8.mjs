@@ -18,7 +18,9 @@ try {
     : existsSync('data/qa-v7-login.json') ? JSON.parse(readFileSync('data/qa-v7-login.json', 'utf8')) : null;
   if (login) assert.equal((await context.request.post(base + '/api/session', { headers: { origin: base }, data: login })).status(), 200, 'login');
   const erp = await (await context.request.get(base + '/api/erp?company=KBA')).json();
-  const rec = await (await context.request.get(`${base}/api/operations?company=KBA&view=bank-reconciliation&period=${erp.period.id}`)).json();
+  const recUrl = `${base}/api/operations?company=KBA&view=bank-reconciliation&period=${erp.period.id}`;
+  const mandiri = (await (await context.request.get(recUrl)).json()).coverage.find((c) => c.code === '11107');
+  const rec = await (await context.request.get(`${recUrl}&account=${mandiri.id}`)).json();
   await check('bank reconciliation API matches statement lines and lists both unmatched sides', async () => {
     assert.equal(rec.account.code, '11107');
     assert.ok(rec.totals.matched > 0);
@@ -29,7 +31,10 @@ try {
   await check('accounting page shows reconciliation and drills from a book-only item to its journal', async () => {
     await page.goto(base + '/accounting?company=KBA');
     await page.getByRole('button', { name: /Rekonsiliasi bank/ }).click();
+    const coverage = page.getByRole('region', { name: 'Cakupan rekening koran' });
+    await coverage.locator('tr', { hasText: '11107' }).getByRole('button', { name: 'Rekonsiliasi' }).click();
     const panel = page.getByRole('region', { name: 'Rekonsiliasi bank' });
+    await panel.getByText('11107 · Bank Mandiri KBA').waitFor();
     await panel.waitFor();
     assert.ok((await panel.locator('tbody tr').count()) >= 9);
     await page.screenshot({ path: `${folder}/bank-reconciliation.png`, fullPage: true });
