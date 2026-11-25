@@ -12,7 +12,7 @@ const MONTHS: Record<string, number> = {
   january: 1, januari: 1, february: 2, februari: 2, march: 3, maret: 3, april: 4, may: 5, mei: 5, june: 6, juni: 6,
   july: 7, juli: 7, august: 8, agustus: 8, september: 9, october: 10, oktober: 10, november: 11, december: 12, desember: 12,
 };
-export type StatementLine = { date: string; description: string; inflow: bigint; outflow: bigint; balance: bigint; row: number; computedBalance: bigint };
+export type StatementLine = { date: string; description: string; inflow: bigint; outflow: bigint; balance: bigint; row: number; computedBalance: bigint | null };
 export type StatementSection = {
   index: number;
   title: string;
@@ -28,10 +28,11 @@ export type StatementSection = {
 
 /** "Rp1,234.50" / "-Rp5" → cents. */
 export function rupiahCents(s: string): bigint {
-  const t = s.replace(/["\s]/g, "");
-  const neg = /^-|\(/.test(t);
-  const digits = t.replace(/[^\d.]/g, "");
-  if (!digits) throw new Error(`Nominal tidak terbaca: ${s}`);
+  const t = s.replace(/["\s]/g, "").replace("Rp", "");
+  const neg = t.startsWith("-") || (t.startsWith("(") && t.endsWith(")"));
+  const unsigned = t.startsWith("-") ? t.slice(1) : t.startsWith("(") && t.endsWith(")") ? t.slice(1, -1) : t;
+  if (!/^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(unsigned)) throw new Error("Nominal rekening koran tidak valid; jangan menganggap error atau format ambigu sebagai nol.");
+  const digits = unsigned.replaceAll(",", "");
   const [whole, dec = ""] = digits.split(".");
   const v = BigInt(whole || "0") * 100n + BigInt((dec + "00").slice(0, 2));
   return neg ? -v : v;
@@ -43,7 +44,9 @@ const isoDate = (d: string) => {
     return us ? [us[0], us[2], us[1], us[3]] : null;
   })();
   if (!m || !MONTHS[m[2].toLowerCase()]) return null;
-  return `${m[3]}-${String(MONTHS[m[2].toLowerCase()]).padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  const iso = `${m[3]}-${String(MONTHS[m[2].toLowerCase()]).padStart(2, "0")}-${m[1].padStart(2, "0")}`, parsed = new Date(iso + "T00:00:00Z");
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== iso) throw new Error("Tanggal rekening koran tidak valid.");
+  return iso;
 };
 const AMT = String.raw`"\s*(-?Rp\(?[\d,.]+\)?)\s*"`;
 
@@ -57,20 +60,18 @@ export function parseStatementText(text: string): StatementSection[] {
     const rowRe = new RegExp(String.raw`(\d{1,2} [A-Za-z]+ \d{4}|"[A-Za-z]+, [A-Za-z]+ \d{1,2}, \d{4}"),((?:"[^"]*"|[^,"])*),(?:${AMT})?,(?:${AMT})?,${AMT}`, "g");
     const lines: StatementLine[] = [];
     const breaks: StatementSection["breaks"] = [];
-    let running = opening ?? 0n;
+    let running: bigint | null = opening;
     for (const m of body.matchAll(rowRe)) {
       const date = isoDate(m[1]);
       if (!date) continue;
       const inflow = m[3] ? rupiahCents(m[3]) : 0n,
         outflow = m[4] ? rupiahCents(m[4]) : 0n,
         balance = rupiahCents(m[5]);
-      running += inflow - outflow;
+      const computedBalance: bigint | null = running === null ? null : running + inflow - outflow;
       const row = lines.length + 1;
-      if (running !== balance) {
-        breaks.push({ row, printed: balance, computed: running });
-        running = balance; // continue from the printed balance so one typo is reported once
-      }
-      lines.push({ date, description: m[2].replace(/^"|"$/g, "").trim(), inflow, outflow, balance, row, computedBalance: running });
+      if (computedBalance !== null && computedBalance !== balance) breaks.push({ row, printed: balance, computed: computedBalance });
+      running = computedBalance === null ? null : balance;
+      lines.push({ date, description: m[2].replace(/^"|"$/g, "").trim(), inflow, outflow, balance, row, computedBalance });
     }
     const months = [...new Set(lines.map((l) => l.date.slice(0, 7)))].sort();
     const month = months.length ? months[months.length - 1] : null;

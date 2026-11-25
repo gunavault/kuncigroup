@@ -8,6 +8,8 @@ import { managementPdf, managementXlsx } from "@/lib/management-export";
 import { financialRatios } from "@/lib/financial-ratios";
 import { addRatioSheet } from "@/lib/ratio-export";
 import { finalizationStatus } from "@/lib/finalization";
+import { serviceReport } from "@/lib/service-report";
+import { serviceXlsx, servicePdf } from "@/lib/service-export";
 export const runtime = "nodejs";
 export async function GET(req: Request) {
   try {
@@ -26,6 +28,15 @@ export async function GET(req: Request) {
     ]);
     if (actor.mustChangePassword || allowedBranches(actor, company).length)
       throw new Error("Akses laporan tidak diizinkan.");
+    if (url.searchParams.get("report") === "service") {
+      if (!id) throw new Error("Pilih periode laporan jasa.");
+      const r = await serviceReport(actor, company, id), pdf = url.searchParams.get("format") === "pdf";
+      const name = `siklus-jasa-${company}-${r.period.name}`.replace(/[^A-Za-z0-9-]/g, "-");
+      return new Response(new Uint8Array(pdf ? await servicePdf(r) : await serviceXlsx(r)), { headers: {
+        "Content-Type": pdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${name}.${pdf ? "pdf" : "xlsx"}"`, "Cache-Control": "no-store",
+      } });
+    }
     if (url.searchParams.get("report") === "management") {
       const m = await managementReport(company, id ?? undefined);
       const ratios = await financialRatios(actor, company, m.period.id);

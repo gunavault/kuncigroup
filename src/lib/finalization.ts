@@ -7,6 +7,7 @@ import { assignedRole, type Actor } from "./auth";
 import { historicalWindow } from "./working-paper-ledger";
 import { createHash } from "node:crypto";
 import { authorizeCompany, allowedBranches, AccessError } from "./auth";
+import { servicePlanKey, calkSections } from "./service-plans";
 
 /**
  * Report finalisation for periods carrying working-paper findings.
@@ -43,10 +44,10 @@ export async function finalizationStatus(companyId: string, periodId: string, tx
   const period = await tx.fiscalPeriod.findFirstOrThrow({ where: { id: periodId, companyId } });
   const company = await tx.company.findUniqueOrThrow({ where: { id: companyId } });
   const history = historicalWindow(company.settings);
-  const applies = history?.periodId === period.id;
+  const applies = !company.isDemo;
   const r = await reports(tx, period.id);
   const store = (await load(tx, companyId))[period.id] ?? {};
-  const control = applies
+  const control = history?.periodId === period.id
     ? await tx.sourceFact.findMany({ where: { companyId, kind: "CONTROL", sheet: "TEMUAN" }, orderBy: { row: "asc" }, select: { data: true } })
     : [];
   const findings = control.filter((c) => cell(c.data, "1")).map((c) => {
@@ -60,14 +61,18 @@ export async function finalizationStatus(companyId: string, periodId: string, tx
   const suspense = nonZero((x) => x.code.startsWith("999"));
   const drafts = await tx.journalEntry.count({ where: { fiscalPeriodId: period.id, status: "DRAFT" } });
   const openHigh = findings.filter((f) => f.severity === "T" && !["RESOLVED", "ACCEPTED_RISK"].includes(f.status));
-  const ledgerFingerprint = createHash("sha256").update(JSON.stringify({ accounting: obj(company.settings).accounting, entries: r.entries.map(e => e.id).sort(), rows: r.rows.map(a => [a.id, a.code, a.name, a.category, a.net, a.isCash, a.role, a.normalBalance]) })).digest("hex");
+  const bank = applies ? await bankBalanceCheck(tx, companyId, period.endDate, r.rows, [...new Set(r.entries.flatMap(e => e.lines.filter(l => l.account.isCash).map(l => l.accountId)))], period.startDate) : { ok: true, detail: "Tidak berlaku", fingerprint: "" };
+  const servicePlan = await tx.moduleSetting.findUnique({ where: { companyId_key: { companyId, key: servicePlanKey(period.id) } }, select: { settings: true } });
+  const ledgerFingerprint = createHash("sha256").update(JSON.stringify({ notesAndPlans: servicePlan?.settings ?? null, bank: bank.fingerprint, accounting: obj(company.settings).accounting, entries: r.entries.map(e => e.id).sort(), rows: r.rows.map(a => [a.id, a.code, a.name, a.category, a.net, a.isCash, a.role, a.normalBalance]) })).digest("hex");
   const signoffs = (store.signoffs ?? []).filter(s => s.ledgerFingerprint === ledgerFingerprint);
   const staleSignoffs = (store.signoffs ?? []).length - signoffs.length;
   const finance = signoffs.find((s) => s.role === "FINANCE"), director = signoffs.find((s) => s.role === "DIRECTOR");
-  const bank = applies ? await bankBalanceCheck(tx, companyId, period.endDate, r.rows) : { ok: true, detail: "Tidak berlaku" };
   const checks = [
+    { key: "ledger", label: "Buku besar periode memiliki jurnal terposting", ok: r.entries.length > 0, detail: `${r.entries.length} jurnal sebelum penutupan; kosong belum membuktikan saldo nihil` },
     { key: "balanced", label: "Neraca saldo, neraca dan arus kas seimbang", ok: r.trialDebit === r.trialCredit && signedCents(r.balanceDifference) === 0n && signedCents(r.cash.difference) === 0n, detail: `Selisih neraca ${r.balanceDifference}; selisih arus kas ${r.cash.difference}` },
     { key: "drafts", label: "Tidak ada jurnal draft", ok: drafts === 0, detail: `${drafts} draft` },
+    { key: "framework", label: "Kerangka pelaporan ditetapkan dengan dasar keputusan", ok: ["SAK_EP", "SAK_EMKM", "SAK_INDONESIA"].includes(String(obj(servicePlan?.settings).framework)) && String(obj(servicePlan?.settings).frameworkEvidence ?? "").trim().length >= 20, detail: String(obj(servicePlan?.settings).framework ?? "Belum ditetapkan") },
+    { key: "calk", label: "CaLK dilengkapi termasuk kebijakan, kontrak dan imbalan kerja", ok: calkSections.every(([key]) => String(obj(obj(servicePlan?.settings).notes)[key] ?? "").trim().length >= 20), detail: `${calkSections.filter(([key]) => String(obj(obj(servicePlan?.settings).notes)[key] ?? "").trim().length >= 20).length}/${calkSections.length} bagian dilengkapi` },
     { key: "estimates", label: "Akun estimasi sudah diganti angka aktual (saldo nol)", ok: estimates.length === 0, detail: estimates.map((e) => `${e.code} ${e.balance}`).join("; ") || "Nihil" },
     { key: "suspense", label: "Akun penampung sudah direklasifikasi (saldo nol)", ok: suspense.length === 0, detail: suspense.map((e) => `${e.code} ${e.balance}`).join("; ") || "Nihil" },
     { key: "bank", label: "Rekening bank direkonsiliasi ke rekening koran s.d. akhir periode", ok: bank.ok, detail: bank.detail },

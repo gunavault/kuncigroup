@@ -7,6 +7,8 @@ export const ratioMappingFields = [
   { key: "receivableIds", label: "Piutang usaha untuk DSO", category: "ASET" },
   { key: "creditSalesRevenueIds", label: "Pendapatan khusus penjualan kredit (neto)", category: "PENDAPATAN" },
   { key: "interestExpenseIds", label: "Beban bunga untuk interest coverage", category: "BEBAN" },
+  { key: "laborExpenseIds", label: "Biaya tenaga kerja (gaji, lembur, THR, BPJS)", category: "BEBAN" },
+  { key: "chemicalExpenseIds", label: "Beban pemakaian chemical / perlengkapan", category: "BEBAN" },
 ] as const;
 export function validateRatioMapping(value: unknown, accounts: { id: string; category: string }[]) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Pemetaan rasio tidak valid.");
@@ -29,7 +31,7 @@ export function validateRatioMapping(value: unknown, accounts: { id: string; cat
  * - quick assets: cash/bank accounts and receivables only (no inventory, prepaid, tax assets or related-party loans);
  * - interest-bearing debt: liabilities named pinjaman / pembiayaan / bank / leasing / kredit;
  * - inventory: "persediaan"; trade receivables: "piutang usaha/dagang";
- * - credit sales: operating revenue 4xxxx except returns (invoice-based B2B contracts);
+ * - credit sales: no automatic proposal; invoice/contract evidence is required;
  * - interest expense: BEBAN named "bunga" except tax on interest income.
  */
 export function suggestRatioMapping(accounts: { id: string; code: string; name: string; category: string; isCash: boolean; active?: boolean }[]) {
@@ -43,8 +45,10 @@ export function suggestRatioMapping(accounts: { id: string; code: string; name: 
     interestBearingDebtIds: pick((a) => a.category === "KEWAJIBAN" && /pinjaman|pembiayaan|bank|leasing|kredit/i.test(a.name)),
     inventoryIds: pick((a) => a.category === "ASET" && /persediaan/i.test(a.name)),
     receivableIds: pick((a) => a.category === "ASET" && /piutang (usaha|dagang)/i.test(a.name)),
-    creditSalesRevenueIds: pick((a) => a.category === "PENDAPATAN" && a.code.startsWith("4") && !/retur|potongan/i.test(a.name)),
+    creditSalesRevenueIds: [], // A name/range alone does not prove that all revenue is credit sales.
     interestExpenseIds: pick((a) => a.category === "BEBAN" && /bunga/i.test(a.name) && !/pajak/i.test(a.name)),
+    laborExpenseIds: pick((a) => a.category === "BEBAN" && /tenaga kerja|gaji|upah|lembur|thr|bpjs|honor|tunjangan/i.test(a.name) && !/pajak/i.test(a.name)),
+    chemicalExpenseIds: pick((a) => a.category === "BEBAN" && /bahan baku|chemical|bahan pembersih|perlengkapan kebersihan/i.test(a.name)),
   };
   return validateRatioMapping(mapping, accounts);
 }

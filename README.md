@@ -1,6 +1,8 @@
-# Kunci Group ERP — rilis operasional v4
+# Kunci Group ERP — dashboard dan siklus akuntansi jasa v9
 
 ERP kustom Next.js/PostgreSQL dengan 19 aplikasi, alur persetujuan, pembukuan berpasangan, dan pemisahan data perusahaan/cabang. Kajian Odoo digunakan sebagai referensi kebutuhan. Aplikasi ini bukan instalasi Odoo dan tidak menggunakan lisensi Odoo Enterprise.
+
+Pembaruan 25 November 2026 melanjutkan v7/v8: kartu utama memakai buku besar periode terakhir yang tersedia, dengan saldo kontrol piutang/kasbon dan tautan penelusuran. Register impor, angka buku besar dan rencana ditampilkan terpisah. Inventory menampilkan baris saldo stok sumber ketika lot operasional belum dibuka. *Accounting → Siklus jasa & CaLK* memuat aging AR/AP, rekonsiliasi akun kontrol, profitabilitas dan alokasi analitis site, biaya tenaga kerja, anggaran/aktual, rencana kas talangan, CaLK dan ekspor Excel/PDF. Lihat [LAPORAN_UJI_TUNTAS_V9.md](LAPORAN_UJI_TUNTAS_V9.md) untuk cakupan dan batas bukti.
 
 Alamat publik sementara: **https://kunci-erp-45422633542.us-central1.run.app**. Login administrator: `admin@kuncigroup.cloud`; kata sandi tersimpan di file lokal `data/kunci-cloud-access.txt`, tidak di repositori atau dokumen ini. Semua data bisnis memerlukan login. Buka Settings untuk mengganti kata sandi dan membuat akun individu.
 
@@ -84,7 +86,7 @@ npm.cmd run typecheck
 npm.cmd run build
 ```
 
-Pengujian database membuat/menghapus schema UUID sementara, bukan schema `public`. Memerlukan akun migrasi yang dapat membuat schema; jangan memakai akun runtime. 49 pemeriksaan telah lulus pada rilis ini. Smoke HTTP produksi juga memeriksa login, sesi, pembatasan API, impor, PDF, PNG barcode, isolasi buku besar dan CSRF. Uji kamera/GPS pada perangkat sebenarnya dan uji beban belum dilakukan; host browser otomatis pada sesi ini tidak tersedia.
+Pengujian database membuat/menghapus schema UUID sementara, bukan schema `public`. Memerlukan akun migrasi yang dapat membuat schema; jangan memakai akun runtime. Rilis v9 memiliki 104 pemeriksaan otomatis. QA browser menggunakan Edge/Playwright untuk desktop dan lebar 390px, termasuk 19 modul, penelusuran, ekspor dan formulir. Detail hasil aktual tersedia pada laporan rilis. Uji kamera/GPS perangkat nyata dan uji beban belum dilakukan.
 
 ## Operasi cloud
 

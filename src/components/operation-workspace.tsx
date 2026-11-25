@@ -162,6 +162,7 @@ export type AppState = {
     _count: number;
     _sum: { amount: string | null; settled: string | null };
   }[];
+  ledgerOverview: { eligible: boolean; available: boolean; period: { id: string; name: string } | null; revenue: string | null; receivable: string | null; advance: string | null; journals: number; historical: boolean; accounts: { receivable: string; advance: string }; basis: string };
   stats: {
     module: string;
     status: string;
@@ -887,28 +888,32 @@ export default function OperationWorkspace() {
                   <section className="kpi-grid ops-kpis">
                     {[
                       {
-                        name: "Penjualan diposting",
-                        value: money(totalValue("sales") + totalValue("pos")),
+                        name: state.ledgerOverview?.eligible ? "Pendapatan buku besar" : "Penjualan dokumen terposting",
+                        value: state.ledgerOverview?.eligible ? state.ledgerOverview.revenue === null ? "Belum tersedia" : money(state.ledgerOverview.revenue) : money(totalValue("sales") + totalValue("pos")),
                         icon: TrendingUp,
-                        note: "Dokumen aktual yang sudah diposting",
+                        href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "statements" })}` : undefined,
+                        note: state.ledgerOverview?.eligible ? state.ledgerOverview.basis : "Dokumen aktual dalam cakupan akses yang sudah diposting",
                       },
                       {
-                        name: "Piutang belum lunas",
-                        value: money(totalValue("sales", true)),
+                        name: state.ledgerOverview?.eligible ? "Piutang buku besar" : "Piutang dokumen terposting",
+                        value: state.ledgerOverview?.eligible ? state.ledgerOverview.receivable === null ? "Belum tersedia" : money(state.ledgerOverview.receivable) : money(totalValue("sales", true)),
                         icon: Receipt,
-                        note: "Saldo invoice pelanggan",
+                        href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "service" })}` : undefined,
+                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.receivable} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; rincian invoice perlu direkonsiliasi` : "Saldo invoice pelanggan dalam cakupan akses",
                       },
                       {
-                        name: "Kasbon belum selesai",
-                        value: money(totalValue("cash-advance", true)),
+                        name: state.ledgerOverview?.eligible ? "Saldo akun kasbon" : "Kasbon dokumen terposting",
+                        value: state.ledgerOverview?.eligible ? state.ledgerOverview.advance === null ? "Belum tersedia" : money(state.ledgerOverview.advance) : money(totalValue("cash-advance", true)),
                         icon: Wallet,
-                        note: "Dikurangi pertanggungjawaban & pengembalian",
+                        href: state.ledgerOverview?.eligible && state.ledgerOverview.period ? `/accounting?${new URLSearchParams({ company, period: state.ledgerOverview.period.id, view: "ledger", account: String((state.company.settings.accounting as Record<string, unknown>)?.advance ?? "") })}` : undefined,
+                        note: state.ledgerOverview?.eligible ? `${state.ledgerOverview.accounts.advance} · ${state.ledgerOverview.period?.name ?? "Periode belum dibukukan"}; sumber kasbon belum dipadankan ke akun` : "Dikurangi pertanggungjawaban & pengembalian",
                       },
                       {
                         name: "Menunggu persetujuan",
                         value: String(pendingCount),
                         icon: ShieldCheck,
-                        note: "Dokumen yang sudah diajukan",
+                        href: undefined,
+                        note: pendingCount ? "Dokumen yang sudah diajukan" : "Belum ada pengajuan pada cakupan ini. Dokumen impor tetap perlu ditinjau sebelum masuk workflow.",
                       },
                     ].map((k) => (
                       <article className="panel kpi" key={k.name}>
@@ -920,6 +925,7 @@ export default function OperationWorkspace() {
                         </div>
                         <h2>{k.value}</h2>
                         <p>{k.note}</p>
+                        {k.href && <a className="trace-link" href={k.href}>Telusuri laporan dan sumber <ArrowRight size={13} /></a>}
                       </article>
                     ))}
                   </section>

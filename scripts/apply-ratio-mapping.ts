@@ -23,7 +23,7 @@ if (!apply || (hasExisting && !replace)) {
   process.exit(0);
 }
 await db.$transaction(async (tx) => {
-  await tx.company.update({ where: { id: companyId }, data: { settings: { ...settings, accounting: { ...accounting, ratios: mapping } } as Prisma.InputJsonValue } });
+  await tx.company.update({ where: { id: companyId }, data: { settings: { ...settings, accounting: { ...accounting, ratios: mapping, ratioMappingReview: { status: "PENDING", method: "suggestRatioMapping", at: new Date().toISOString() } } } as Prisma.InputJsonValue } });
   await tx.auditEvent.create({ data: { companyId, action: "RATIO_MAPPING_AUTO", entityId: companyId, details: { rule: "suggestRatioMapping", mapping, replaced: Boolean(hasExisting) } as Prisma.InputJsonValue } });
 });
 console.log(JSON.stringify({ mode: "APPLIED", company: companyId, pemetaan: view }, null, 2));

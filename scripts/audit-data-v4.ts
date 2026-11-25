@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { definitions, masterDefinitions, modules } from "../src/lib/operations/registry";
+import { calkSections } from "../src/lib/service-plans-ui";
 
 type Row = Record<string, any>;
 const input = JSON.parse(readFileSync(process.argv[2] ?? "data/audit-v4/production.json", "utf8"));
@@ -142,7 +143,42 @@ const sourceCodes = new Set(sourceJournals.filter(f => !f.accountId).map(f => f.
 for (const code of sourceCodes) gap(sourceIssues, "SUMBER", `account:${code}`, "FINANCIAL_JOURNAL", "KBA", String(code), "Pemetaan COA", "AKUN PENAMPUNG", "TINGGI", "Finance", "Tentukan substansi dan akun tujuan dari bukti. Akun penampung sumber tidak diposting otomatis.", "Kertas kerja / JURNAL");
 for (const issue of bundle.issues ?? []) gap(sourceIssues, "SUMBER", createHash("sha256").update(JSON.stringify(issue)).digest("hex").slice(0,16), "TEMUAN_SUMBER", "KBA", String(issue.sheet ?? issue.file ?? "SUMBER"), String(issue.code ?? issue.type ?? "Temuan sumber"), "KENDALI SUMBER", "TINGGI", "HR / Finance / Operasional", String(issue.message ?? issue.description ?? issue.detail ?? "Tinjau temuan asli pada sumber."), `${issue.file ?? ""} / ${issue.sheet ?? ""}${issue.row ? "!" + issue.row : ""}`);
 const current = masters.filter(m => m.companyId === "KBA" && m.kind === "EMPLOYEE" && m.data?.currentRoster);
+for (const f of facts.filter(f => f.kind === "BANK_STATEMENT_PERIOD")) {
+  if (f.data?.opening == null || f.data?.closing == null) gap(sourceIssues, "SUMBER", f.id, f.kind, f.companyId, `${f.sheet}!${f.row}`, "Saldo awal/akhir koran belum lengkap", "REKONSILIASI BANK", "TINGGI", "Finance", "Lengkapi dari koran bank. Saldo kosong tidak dianggap nol.", `${f.sourceFileId} / ${f.sheet}`);
+  if (f.status !== "REVIEWED" || f.data?.coverageConfirmed !== true) gap(sourceIssues, "SUMBER", f.id, f.kind, f.companyId, `${f.sheet}!${f.row}`, "Kelengkapan bulan koran belum dikonfirmasi", "REKONSILIASI BANK", "TINGGI", "Finance", "Periksa seluruh mutasi dan saldo awal/akhir bulan, lalu konfirmasi cakupan pada Data unggahan.", `${f.sourceFileId} / ${f.sheet}`);
+  if (Number(f.data?.rowBreaks ?? 0) > 0) gap(sourceIssues, "SUMBER", f.id, f.kind, f.companyId, `${f.sheet}!${f.row}`, `${f.data.rowBreaks} selisih saldo cetak/mutasi`, "REKONSILIASI BANK", "TINGGI", "Finance", "Cocokkan workbook dengan koran bank asli dan pertahankan bukti koreksi. Jangan menutup selisih dengan jurnal rekaan.", `${f.sourceFileId} / ${f.sheet}`);
+}
+for (const f of facts.filter(f => f.kind === "BUDGET_RAB" && f.status !== "REVIEWED")) gap(sourceIssues, "SUMBER", f.id, f.kind, f.companyId, `${f.sheet}!${f.row}`, "Persetujuan RAB, masa layanan dan lokasi baris asli", "KAJIAN RAB TENDER", "TINGGI", "Finance / Komersial", "Konfirmasi perusahaan/site, kontrak, periode berlaku dan baris/cell asli. Ringkasan RAB dan bulan invoice belum membuktikan anggaran periode yang disetujui.", `${f.sourceFileId} / ${f.sheet}!${f.row} (ringkasan impor)`);
+for (const id of [...new Set(facts.filter(f => f.kind === "BUDGET_RAB").map(f => f.sourceFileId))]) {
+  const source = input.sources.find((s: Row) => s.id === id);
+  if (source && blank(source.sha256)) gap(sourceIssues, "SUMBER", `rab-hash:${id}`, "BUDGET_RAB", source.companyId, source.name, "Hash workbook RAB asli", "JEJAK SUMBER RAB", "SEDANG", "Finance / Komersial", "Simpan dan cocokkan hash workbook asli dengan ringkasan yang diimpor. Jangan menggunakan hash ringkasan JSON sebagai hash workbook.", source.name);
+}
+for (const c of input.companies.filter((c: Row) => !c.isDemo && c.settings?.historicalLedger)) {
+  const history = c.settings.historicalLedger, from = new Date(history.from), end = new Date(history.through), active = new Set(input.journals.filter((j: Row) => j.companyId === c.id && j.status === "POSTED").flatMap((j: Row) => j.lines.map((l: Row) => l.accountId)));
+  for (const a of input.accounts.filter((a: Row) => a.isCash && !/^kas\b/i.test(a.name) && active.has(a.id))) {
+    for (const date = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1)); date <= end; date.setUTCMonth(date.getUTCMonth() + 1)) {
+      const month = date.toISOString().slice(0, 7);
+      if (!facts.some(f => f.companyId === c.id && f.kind === "BANK_STATEMENT_PERIOD" && f.accountId === a.id && f.data?.month === month)) gap(sourceIssues, "SUMBER", `bank:${c.id}:${a.id}:${month}`, "REKENING_KORAN_BELUM_ADA", c.id, `${a.code} / ${month}`, "Rekening koran bulan terkait", "REKONSILIASI BANK", "TINGGI", "Finance", "Sediakan koran bank lengkap untuk akun dan bulan terkait. Jangan mengganti koran yang belum tersedia dengan nol.", a.name);
+    }
+  }
+  if ((input.automaticRatioCompanies ?? []).some((s: Row) => s.companyId === c.id) && c.settings.accounting?.ratioMappingReview?.status !== "VERIFIED") gap(sourceIssues, "SUMBER", `ratio:${c.id}`, "PEMETAAN_RASIO", c.id, c.code, "Tinjauan usulan pemetaan rasio", "KLASIFIKASI FINANCE", "TINGGI", "Finance", "Tinjau klasifikasi lancar/likuid, tenor, bunga dan penjualan kredit pada Pengaturan, dengan rujukan bukti.", "Bagan akun / Pengaturan");
+}
 for (const f of facts.filter(f => f.data?.sourceRevision && f.status !== "REVIEWED")) gap(sourceIssues, "SUMBER", f.id, f.kind, f.companyId, `${f.sheet}!${f.row}`, f.data?.issuerPending ? "Konflik penerbit invoice" : "Revisi invoice belum direkonsiliasi", "REVISI DRIVE 23-NOV-2026", "TINGGI", "Finance / Komersial", "Bandingkan versi sebelumnya, invoice, bukti potong dan bank. Review sumber tidak memposting atau mengganti jurnal historis.", `${f.sourceFileId} / ${f.sheet}!${f.row}`);
+for (const f of facts.filter(f => f.kind === "CONTROL" && f.data?.reviewOnly && f.data?.rule && f.status !== "REVIEWED")) gap(sourceIssues, "SUMBER", f.id, "KENDALI_SUMBER_DRIVE", f.companyId, `${f.sheet}!${f.row}`, String(f.data.rule), "KAJIAN SUMBER DRIVE", "TINGGI", "Finance / Operasional", String(f.data.description ?? "Tinjau temuan sumber sebelum menggunakan angka."), `${f.sourceFileId} / ${f.sheet}!${f.row}`);
+for (const c of input.companies.filter((c: Row) => !c.isDemo && c.active)) {
+  const period = input.periods.filter((p: Row) => p.companyId === c.id && input.journals.some((j: Row) => j.fiscalPeriodId === p.id && j.status === "POSTED" && j.type !== "CLOSING")).sort((a: Row, b: Row) => String(b.endDate).localeCompare(String(a.endDate)))[0];
+  if (!period) { gap(sourceIssues, "SUMBER", `ledger:${c.id}`, "BUKU_BESAR", c.id, c.code, "Buku besar operasional belum tersedia", "DASAR DASHBOARD", "TINGGI", "Finance", "Sediakan saldo awal, jurnal dan bukti yang disetujui. Dokumen impor tidak membuktikan saldo buku besar.", "Periode / Jurnal"); continue; }
+  const plan = input.moduleSettings?.find((s: Row) => s.companyId === c.id && s.key === `_service_plan:${period.id}`)?.settings ?? {};
+  const add = (key: string, label: string, action: string) => gap(sourceIssues, "SUMBER", `service:${c.id}:${period.id}:${key}`, "SIKLUS_AKUNTANSI_JASA", c.id, period.name, label, "KELENGKAPAN SIKLUS JASA", "TINGGI", "Finance / Direksi", action, "Accounting / Siklus jasa & CaLK");
+  if (!plan.framework || plan.framework === "UNCONFIRMED" || String(plan.frameworkEvidence ?? "").trim().length < 20) add("framework", "Kerangka pelaporan dan dasar keputusan", "Tetapkan kerangka yang sesuai kondisi entitas dengan rujukan keputusan berbukti.");
+  for (const [key, label] of calkSections) if (String(plan.notes?.[key] ?? "").trim().length < 20) add(`calk:${key}`, label, "Lengkapi pengungkapan beserta bukti. Jika tidak berlaku, jelaskan alasannya; jangan isi nol sebagai pengganti kajian.");
+  if (!plan.budgets?.length) add("budget", "Anggaran biaya jasa per proyek", "Cocokkan RAB/RAP dengan perusahaan, proyek dan periode. Simpan sebagai rencana, bukan biaya aktual.");
+  if (!plan.cashPlans?.length) add("cash", "Rencana kas talangan gaji dan penagihan", "Lengkapi tanggal/jumlah payroll bruto, BPJS, pajak dan penerimaan yang didukung jadwal/bukti.");
+  for (const key of ["laborExpenseIds", "chemicalExpenseIds"]) if (!c.settings.accounting?.ratios?.[key]?.length || c.settings.accounting?.ratioMappingReview?.status !== "VERIFIED") add(key, key === "laborExpenseIds" ? "Pemetaan biaya tenaga kerja" : "Pemetaan biaya chemical", "Tinjau akun biaya dan rujukan bukti pada Pengaturan sebelum menghitung rasio/aktual.");
+  const projectRecords = records.filter(d => d.companyId === c.id && d.status === "POSTED" && d.data?.projectId).map(d => d.journalId);
+  const hasUnallocated = input.journals.some((j: Row) => j.fiscalPeriodId === period.id && j.status === "POSTED" && j.type !== "CLOSING" && !projectRecords.includes(j.id) && j.lines.some((l: Row) => input.accounts.some((a: Row) => a.id === l.accountId && ["PENDAPATAN", "BEBAN"].includes(a.category))));
+  if (hasUnallocated && !plan.allocations?.length) add("allocation", "Alokasi pendapatan/beban historis ke site", "Telusuri kontrak, BAST, WO dan bukti biaya. Alokasikan analitis berdasarkan bukti; jurnal asli tetap utuh.");
+}
 for (const f of facts.filter(f => f.kind === "CONTROL" && f.sheet === "TEMUAN" && f.data?.cells?.["1"])) {
   const code = String(f.data.cells["1"]), stores = (input.moduleSettings ?? []).filter((s: Row) => s.companyId === f.companyId).flatMap((s: Row) => Object.values(s.settings ?? {})) as Row[];
   const resolved = stores.some(s => ["RESOLVED", "ACCEPTED_RISK"].includes(s.findings?.[code]?.status));

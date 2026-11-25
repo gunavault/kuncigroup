@@ -64,7 +64,7 @@ test("automatic ratio mapping follows the chart of accounts and passes validatio
   assert.deepEqual(m.interestBearingDebtIds, ["loan"]);
   assert.deepEqual(m.inventoryIds, ["inv"]);
   assert.deepEqual(m.receivableIds, ["ar"]);
-  assert.deepEqual(m.creditSalesRevenueIds, ["rev"]);
+  assert.deepEqual(m.creditSalesRevenueIds, [], "a revenue account does not prove credit sales");
   assert.deepEqual(m.interestExpenseIds, ["int"]);
   assert.deepEqual(validateRatioMapping(m, accounts), m);
 });
@@ -74,7 +74,7 @@ test("finalisation bank check needs a statement through period end that equals t
   const end = new Date("2026-10-31T00:00:00Z");
   const facts = (through: string, inflow: string) => ({
     findMany: async () => [
-      { kind: "BANK_STATEMENT_PERIOD", effectiveDate: new Date("2026-09-01T00:00:00Z"), debit: null, credit: null, data: { opening: "100.00" } },
+      { kind: "BANK_STATEMENT_PERIOD", effectiveDate: new Date("2026-10-01T00:00:00Z"), debit: null, credit: null, status: "REVIEWED", data: { month: "2026-10", opening: "100.00", closing: inflow === "50.00" ? "150.00" : "140.00", coverageConfirmed: true } },
       { kind: "BANK_STATEMENT", effectiveDate: new Date(through + "T00:00:00Z"), debit: inflow, credit: "0.00", data: {} },
     ],
   });
@@ -83,10 +83,31 @@ test("finalisation bank check needs a statement through period end that equals t
     { id: "k", code: "11101", name: "Kas Kecil", isCash: true, net: "5.00" },
   ];
   const tx = (f: ReturnType<typeof facts>) => ({ sourceFact: f }) as never;
-  assert.deepEqual(await bankBalanceCheck(tx(facts("2026-10-20", "50.00")), "A", end, rows), { ok: true, detail: "Semua rekening cocok" });
+  assert.equal((await bankBalanceCheck(tx(facts("2026-10-20", "50.00")), "A", end, rows)).ok, true);
   assert.match((await bankBalanceCheck(tx(facts("2026-10-20", "40.00")), "A", end, rows)).detail, /11107 selisih buku − koran 10.00/);
   assert.match((await bankBalanceCheck(tx(facts("2026-09-30", "50.00")), "A", end, rows)).detail, /11107 koran baru s.d. 2026-09/);
   assert.equal((await bankBalanceCheck(tx(facts("2026-10-20", "50.00")), "A", end, rows.map((r) => ({ ...r, net: "0.00" })))).ok, true, "no bank balance, nothing to reconcile");
+});
+
+test("unknown opening stays unknown, calculated balance preserves the mismatch, malformed money/dates fail", () => {
+  const result = parseStatementText('PERIODE JANUARI 2026,,,, 5 January 2026,A," Rp5 ",," Rp105 "');
+  assert.equal(result[0].opening, null); assert.equal(result[0].lines[0].computedBalance, null);
+  const typo = parseStatementText(sheet("JANUARI 2026", "Rp100", ['5 January 2026,A," Rp5 ",," Rp90 "']));
+  assert.equal(typo[0].lines[0].computedBalance, 10500n); assert.equal(typo[0].lines[0].balance, 9000n);
+  for (const bad of ['#N/A', 'Rp1.234,50', 'Rp1,23', 'Rp1.000.00', 'Rp1.999']) assert.throws(() => rupiahCents(bad));
+  assert.throws(() => parseStatementText(sheet('FEBRUARI 2026', 'Rp1', ['31 February 2026,A," Rp1 ",," Rp2 "'])));
+});
+
+test("bank gate refuses missing opening, unreviewed coverage, gaps and zero-net accounts with movement", async () => {
+  const { bankBalanceCheck } = await import('../src/lib/bank-reconciliation');
+  const end = new Date('2026-02-28Z'), start = new Date('2026-01-01Z'), rows = [{ id: 'b', code: '11107', name: 'Bank', isCash: true, net: '0.00' }];
+  const check = (facts: unknown[]) => bankBalanceCheck({ sourceFact: { findMany: async () => facts } } as never, 'A', end, rows, ['b'], start);
+  const period = { id: 'p', kind: 'BANK_STATEMENT_PERIOD', status: 'VALIDATED', effectiveDate: new Date('2026-01-01Z'), debit: null, credit: null, data: { month: '2026-01', opening: null, closing: '0.00', rowBreaks: 0 } };
+  const line = { id: 'l', kind: 'BANK_STATEMENT', effectiveDate: end, debit: '1.00', credit: '1.00', data: {} };
+  assert.match((await check([period, line])).detail, /saldo awal koran belum tersedia/);
+  assert.equal((await check([{ ...period, data: { ...period.data, opening: '0.00' } }, line])).ok, false);
+  const gap = await check([{ ...period, status: 'REVIEWED', data: { ...period.data, opening: '0.00', coverageConfirmed: true } }, line]);
+  assert.match(gap.detail, /2026-02 belum dikonfirmasi/);
 });
 
 test("statement parser accepts the weekday date format used in the BCA workbook", () => {

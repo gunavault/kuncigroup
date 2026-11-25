@@ -5,6 +5,7 @@ import { UserManagement } from "./user-management";
 import { Settings2, MapPin, Users, ShieldCheck, KeyRound } from "lucide-react";
 import type { AppState } from "./operation-workspace";
 import { ratioMappingFields, suggestRatioMapping } from "@/lib/ratio-mapping";
+import { RatioMappingEditor } from "./ratio-mapping-editor";
 const approvalModules = [
   ["purchase", "Purchase (PR/RFQ/PO/tagihan)"],
   ["payments", "Pembayaran / pencairan"],
@@ -41,7 +42,7 @@ export function SettingsWorkspace({
     setMap(
       (state.company.settings.accounting ?? {}) as Record<string, unknown>,
     );
-  }, [state.company.id]);
+  }, [state.company.id, state.company.settings.accounting]);
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -62,6 +63,7 @@ export function SettingsWorkspace({
         </div>
       )}
       <UserManagement state={state} onSubmit={onSubmit} />
+      {["ADMIN", "FINANCE"].includes(state.role) && <RatioMappingEditor state={state} onSubmit={onSubmit} />}
       <section className="panel">
         <div className="panel-heading">
           <div>
@@ -344,16 +346,6 @@ export function SettingsWorkspace({
                     </label>
                   ))}
                 </div>
-                <h3>Klasifikasi akun untuk rasio</h3>
-                <p className="muted">Pilih akun berdasarkan kebijakan Finance. Aset cepat harus termasuk aset lancar dan tidak memuat persediaan atau beban dibayar di muka. Kosong berarti belum dipetakan; sistem tidak menganggapnya nol.</p>
-                <p><button type="button" className="button button-outline" onClick={() => setMap(m => ({ ...m, ratios: suggestRatioMapping(accounts as unknown as Parameters<typeof suggestRatioMapping>[0]) }))}>Usulkan pemetaan otomatis dari bagan akun</button> <small className="muted">Mengisi pilihan dari kode dan nama akun (111–113 lancar, 21x liabilitas lancar, kas & piutang sebagai aset cepat, akun pinjaman/pembiayaan berbunga, persediaan, piutang usaha, pendapatan 4xxxx, beban bunga). Tinjau lalu simpan.</small></p>
-                <div className="form-grid">{ratioMappingFields.map(field => {
-                  const ratios = (map.ratios ?? {}) as Record<string, string[]>;
-                  return <label key={field.key}>{field.label}<select multiple size={5} aria-label={`Rasio: ${field.label}`} value={ratios[field.key] ?? []} onChange={e => {
-                    const values = Array.from(e.target.selectedOptions).map(o => o.value);
-                    setMap(m => ({ ...m, ratios: { ...((m.ratios ?? {}) as Record<string, unknown>), [field.key]: values } }));
-                  }}>{accounts.filter(a => a.category === field.category).map(a => <option key={a.id} value={a.id}>{a.code} · {a.name}</option>)}</select><small>Gunakan Ctrl/Command untuk memilih lebih dari satu akun.</small></label>;
-                })}</div>
                 <h3>Matriks persetujuan</h3>
                 <p className="muted">
                   Batas dalam IDR (nilai dokumen termasuk pajak). Nilai ≤ batas

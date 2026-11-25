@@ -25,8 +25,9 @@ export function ModuleMiniDashboard({ company, module, branch = "", query = "", 
     {error ? <div className="alert error" role="alert">{error}<button type="button" onClick={() => setRetry(n => n + 1)}>Coba lagi</button></div> : <div className="module-mini-grid">
       {(result?.cards ?? Array.from({ length: 6 }, (_, i) => ({ key: String(i), label: "Memuat…", value: null, format: "count", detail: "" }))).map(card => <article key={card.key} className={`module-mini-card${card.format === "money" ? " money-card" : ""}`} title={card.detail}>
         <span>{card.label}</span><strong>{card.value === null ? "—" : card.format === "money" ? rupiah(card.value) : new Intl.NumberFormat("id-ID").format(Number(card.value))}</strong>
-        <small>{card.value === null && result ? "Memerlukan hak akses terkait" : card.detail}</small>
+        <small>{card.detail || (card.value === null && result ? "Belum tersedia dalam cakupan akses" : "")}</small>
       </article>)}
     </div>}
+    {result?.sourceNote && <p className="note">{result.sourceNote}</p>}
   </section>;
 }

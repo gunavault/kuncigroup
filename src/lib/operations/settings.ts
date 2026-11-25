@@ -12,11 +12,13 @@ import { modules } from "./registry";
 import { normalizeApprovalSettings } from "./approval";
 import {manageUsers} from './users';
 import { validateRatioMapping } from "../ratio-mapping";
+import { saveRatioMapping } from "../ratio-mapping-review";
 export async function manageSettings(actor: Actor, input: unknown) {
   const s = object(input),
     action = str(s.action),
     companyId = str(s.companyId);
   if(['user','grant','companyAccess','resetPassword','userProfile'].includes(action))return manageUsers(actor,input);
+  if(action==='ratioMapping')return saveRatioMapping(actor,s);
   authorizeCompany(actor, companyId, ["ADMIN"]);
   if (allowedBranches(actor, companyId).length)
     throw new Error(
@@ -211,6 +213,9 @@ export async function manageSettings(actor: Actor, input: unknown) {
       companyId,
       async (tx) => {
         if (d.settings) {
+          const current = object((await tx.company.findUniqueOrThrow({ where: { id: companyId } })).settings);
+          const accounting = object(current.accounting);
+          d.settings = { ...current, ...d.settings, accounting: { ...accounting, ...object(d.settings.accounting), ratios: accounting.ratios ?? {}, ratioMappingReview: accounting.ratioMappingReview ?? null } };
           if (d.settings.approval !== undefined)
             d.settings.approval = normalizeApprovalSettings(
               d.settings.approval,

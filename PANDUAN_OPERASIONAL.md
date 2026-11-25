@@ -175,9 +175,38 @@ Rekening koran diimpor dari workbook Finance *Jurnal rekening koran* di Google D
 - aset cepat: kas dan piutang;
 - pinjaman berbunga: akun pinjaman/pembiayaan;
 - persediaan, piutang usaha;
-- pendapatan 4xxxx tanpa retur;
+- penjualan kredit memerlukan sumber kontrak/invoice dan tidak diisi otomatis;
 - beban bunga.
 
 Tinjau, ubah bila perlu, lalu simpan. Script `scripts/apply-ratio-mapping.ts` menerapkan usulan yang sama dan tidak menimpa pemetaan Finance tanpa `--replace`.
 
 **Register bukti transaksi.** Detail jurnal pada penelusuran kini menampilkan baris register bukti (sheet BUKTI kertas kerja) yang tertaut melalui baris treasury (TRS) atau register invoice (INV), beserta status pemeriksaan dan kelengkapannya.
+
+## Dashboard dan siklus akuntansi jasa (v9)
+
+**Membaca angka dashboard.** Kartu utama bagi pengguna keuangan seluruh perusahaan mengambil buku besar pada periode terakhir yang memiliki jurnal POSTED. Kartu menyebutkan periode dan menyediakan tautan penelusuran. Piutang/kasbon adalah saldo akun kontrol yang dipetakan, sehingga belum merupakan aging per invoice atau pertanggungjawaban per pemegang kasbon. Pengguna bercakupan cabang/staf tetap menerima angka dokumen dalam hak aksesnya. Angka sumber IMPORTED tidak ditambahkan ke buku besar. Nol persetujuan berarti belum ada pengajuan, sedangkan saldo yang belum dapat dibuktikan ditulis *Belum tersedia*.
+
+Inventory menampilkan baris saldo stok sumber bila belum ada lot operasional. Buka **Data unggahan** untuk kuantitas per produk/gudang. Selesaikan stock opname, bukti harga, lokasi dan lot/kedaluwarsa sebelum menyiapkan draft saldo awal. Kuantitas satuan berbeda tidak dijumlahkan. RAB merupakan rencana kebutuhan, bukan bukti penerimaan atau stok fisik.
+
+**Accounting → Siklus jasa & CaLK.** Pilih periode, lalu gunakan enam tab berikut.
+
+| Tab | Cara menggunakan dan dasar angka |
+|---|---|
+| Piutang & utang | Bandingkan akun kontrol, rincian dokumen POSTED dan saldo belum dipadankan. Cari nomor/pihak atau filter kelompok jatuh tempo. Penyelesaian dihitung dari jurnal pembayaran sampai akhir periode; pembayaran setelahnya tidak mengubah aging historis. Tanggal jatuh tempo kosong tetap *Belum diketahui*. Klik nomor dokumen untuk jurnal dan bukti. |
+| Profitabilitas site | Pendapatan, beban langsung jasa dan beban lain menjumlah kembali ke laba/rugi perusahaan. Jurnal tanpa proyek eksplisit berada pada *Belum dialokasikan*. Finance/Admin dapat menambahkan alokasi analitis: baris jurnal, proyek, nominal dan rujukan bukti minimal 20 karakter. Total alokasi tidak boleh melebihi nilai baris. Alokasi tidak mengubah jurnal terposting. |
+| Biaya jasa & stok | Rasio biaya tenaga kerja terhadap pendapatan memakai periode yang sama dan pemetaan akun yang ditinjau Finance. Mutasi stok ditampilkan per halaman. Payroll neto tidak ditaksir menjadi gaji bruto/lembur/BPJS. |
+| Anggaran | Masukkan RAB/RAP per proyek dan kategori Chemical/Tenaga kerja dengan bukti. Anggaran berstatus rencana. Aktual mengikuti akun yang ditinjau dan alokasi proyek. Sisa anggaran belum dapat dipastikan selama biaya perusahaan masih belum dialokasikan. |
+| Rencana kas | Kas dasar adalah saldo akhir buku besar. Tambahkan penerimaan/pengeluaran setelah tanggal dasar beserta sumber jadwalnya. Saldo skenario dan kebutuhan talangan dihitung dalam sen. Rencana bukan transaksi aktual dan tidak memposting jurnal. Rencana kosong belum merupakan proyeksi lengkap. |
+| CaLK & kebijakan | Pilih kerangka pelaporan berdasarkan keputusan entitas dan bukti. Lengkapi delapan bagian, termasuk kontrak, imbalan kerja, penurunan nilai, komitmen dan kejadian setelah periode. Bila tidak berlaku, jelaskan kajian dan alasannya. Catatan tetap draft sampai tinjauan bisnis selesai. |
+
+Finance/Admin seluruh perusahaan dapat menyimpan draft; Manager/Direktur/Auditor membaca. Periode ditutup terkunci. Simpan memakai nomor versi; jika pengguna lain mengubah data, muat ulang untuk mencegah penimpaan. Excel memuat rincian aging/alokasi, PDF merangkum laporan dan CaLK. Nominal Excel berupa teks desimal presisi dua angka. Perubahan catatan/rencana, pemetaan akun, buku besar atau sumber rekonsiliasi membuat sign-off lama kedaluwarsa.
+
+**Penyesuaian berbukti.** Pada formulir jurnal penyesuaian tersedia panduan gaji/lembur, THR, BPJS/pajak, unbilled, chemical, penyusutan, penurunan nilai dan alokasi prepaid. Pemilihan panduan mewajibkan rujukan bukti dan menyimpan jurnal sebagai DRAFT. Finance tetap menentukan akun, tanggal, nominal dan perlakuan berdasarkan substansi; panduan tidak menghitung kewajiban pajak/gaji otomatis.
+
+**Tinjauan pemetaan rasio.** Buka Settings, tinjau klasifikasi akun, isi rujukan bukti dan centang konfirmasi sebelum menyimpan. Usulan kode/nama akun masih menunggu tinjauan dan nilai terkait ditandai SEMENTARA. Penjualan kredit tidak diisi otomatis. Usulan biaya tenaga kerja/chemical mengikuti nama akun dan perlu diperiksa substansinya. Formulir perusahaan umum mempertahankan pemetaan/tinjauan terkini; hanya panel tinjauan yang menulis stempel pemeriksa.
+
+**Panel kertas kerja sumber.** Tab jasa juga memuat analisis site dari kolom sumber jurnal yang dibukukan, umur sejak invoice pada register INV, rincian terbesar OPS_UTANG, UJI_PAYROLL, PROYEKSI_KAS dan perbandingan RAB tender. Tautan file dan nomor sheet/baris tersedia. Umur sejak invoice berbeda dari umur jatuh tempo kontrak. Selisih kecil tetap masuk saldo terbuka, dan penerimaan yang jumlah/tanggalnya ambigu dihitung sebagai baris belum lengkap. Panel RAB memakai indikasi nilai bulanan × bulan tanggal invoice yang teramati; tinjau kontrak sebelum memakai angka itu sebagai anggaran periode yang disetujui. Analisis sumber dan proyek ERP menjelaskan dua cakupan yang berbeda, sehingga totalnya tidak dijumlahkan.
+
+**Konfirmasi rekening koran.** Kecocokan tanggal/nominal merupakan kandidat pencocokan yang perlu diperiksa Finance. Setiap bulan perlu saldo awal/akhir, mutasi lengkap, kontinuitas dan konfirmasi cakupan. Gunakan Data unggahan untuk meninjau **BANK_STATEMENT_PERIOD** dan mencentang kelengkapan bulan berdasarkan koran asli. Akun bank yang bermutasi tetapi bersaldo akhir nol tetap harus direkonsiliasi. Bulan kosong tidak dianggap nol dan tidak diganti dengan bulan pertama yang tersedia.
+
+Finalisasi setiap perusahaan nyata memerlukan buku besar, daftar periksa, dasar kerangka, CaLK, rekonsiliasi dan dua penandatangan berbeda. Sistem tidak memberikan persetujuan Finance/Direksi atas nama pengguna. Catatan pengecualian hanya melalui tindakan berwenang yang tercatat pada audit.

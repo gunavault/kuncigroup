@@ -69,7 +69,7 @@ Jalankan cadangan dan uji pemulihan tanpa menimpa database utama:
 
 ```bash
 sudo /usr/local/sbin/kunci-backup
-sudo bash /srv/kunci/app/deploy/verify-restore-v2.sh
+sudo bash /srv/kunci/app/deploy/verify-restore-current.sh
 ```
 
 Untuk pemulihan bencana, gunakan akun Google Cloud berwenang membaca bucket, unduh paket, verifikasi SHA256SUMS, pulihkan database ke database kosong dan unggahan ke direktori yang dilindungi. Buat kredensial database/runtime baru; password akun aplikasi tetap dari hash dalam database. Jalankan migrasi yang sesuai versi, periksa jumlah master/dokumen/sumber dan keseimbangan jurnal sebelum membuka layanan. Jangan menjalankan `pg_restore --clean` terhadap database utama tanpa rencana pemulihan yang disetujui.

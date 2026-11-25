@@ -2,7 +2,8 @@
 // source facts for one company bank account, so the app can reconcile statement lines to the ledger.
 //   npx tsx scripts/import-bank-statement.ts --file data/bank/<file>.drive.json --company KBA --account 11107 \
 //       --bank "Mandiri KBA operasional" --drive-id <id> [--apply]
-// Dry-run by default. Re-running replaces the facts of the same Drive file (idempotent).
+// Dry-run by default. Re-running may replace only unreviewed facts of the same company.
+// Reviewed/rejected sources require a separate version; their review history must survive.
 // Input files hold bank data and live under data/ (git-ignored); they are never committed.
 import "dotenv/config";
 import { readFileSync } from "node:fs";
@@ -46,6 +47,10 @@ if (!apply) {
 }
 const sha256 = createHash("sha256").update(parsed.fileContent).digest("hex");
 await db.$transaction(async (tx) => {
+  await tx.$queryRaw`SELECT id FROM companies WHERE id=${companyId} FOR UPDATE`;
+  const previous = await tx.sourceFile.findUnique({ where: { id: sourceFileId } });
+  if (previous && previous.companyId !== companyId) throw new Error("Sumber bank telah dimiliki perusahaan lain.");
+  if (await tx.sourceFact.count({ where: { sourceFileId, status: { in: ["REVIEWED", "REJECTED"] } } })) throw new Error("Sumber bank sudah ditinjau. Impor versi terpisah agar bukti dan riwayat review tetap utuh.");
   await tx.dataImportBatch.upsert({
     where: { id: batchId },
     create: { id: batchId, companyId, name: `Rekening koran ${bank}`, status: "IMPORTED", stats: summary as unknown as Prisma.InputJsonValue, completedAt: new Date() },
@@ -69,7 +74,7 @@ await db.$transaction(async (tx) => {
         id: `${sourceFileId}:${s.month}:${l.row}`, companyId, batchId, kind: "BANK_STATEMENT", sourceKey: `${sourceFileId}:${s.month}:${l.row}`, sourceFileId,
         sheet: s.title, row: l.row, effectiveDate: new Date(`${l.date}T00:00:00Z`), accountId: account.id,
         debit: amount(l.inflow), credit: amount(l.outflow), amount: amount(l.balance), status: "VALIDATED",
-        data: { accountCode, bank, description: l.description, printedBalance: amount(l.balance), computedBalance: amount(l.computedBalance) } as Prisma.InputJsonValue,
+        data: { accountCode, bank, description: l.description, printedBalance: amount(l.balance), computedBalance: l.computedBalance === null ? null : amount(l.computedBalance) } as Prisma.InputJsonValue,
       });
   }
   await tx.sourceFact.createMany({ data: facts });

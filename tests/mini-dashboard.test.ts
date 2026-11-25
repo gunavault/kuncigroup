@@ -36,6 +36,15 @@ test("aggregates include every page and enforce company, branch, ownership and s
   await assert.rejects(moduleMiniDashboard(actor("HR"), "A", "sales"));
   assert.equal(value(await moduleMiniDashboard(actor("STAFF"), "A", "sales"), "outstanding"), null);
 });
+
+test("selected fiscal period filters operational cards and rejects a foreign-company period", async () => {
+  const p = await db.fiscalPeriod.create({ data: { companyId: "A", name: "2030 JAN", startDate: new Date("2030-01-01"), endDate: new Date("2030-01-31") } });
+  const foreign = await db.fiscalPeriod.create({ data: { companyId: "B", name: "2030 JAN", startDate: new Date("2030-01-01"), endDate: new Date("2030-01-31") } });
+  await db.businessRecord.create({ data: { companyId: "A", module: "sales", number: "PERIOD", title: "Scoped period", date: new Date("2030-01-15"), actorId: "self" } });
+  assert.equal(value(await moduleMiniDashboard(admin, "A", "sales", { periodId: p.id }), "total"), "1");
+  await assert.rejects(moduleMiniDashboard(admin, "A", "sales", { periodId: foreign.id }));
+  await db.businessRecord.deleteMany({ where: { companyId: "A", number: "PERIOD" } });
+});
 test("selected branch retains shared catalogs while hiding other branches and employee masters", async () => {
   await db.masterRecord.createMany({ data: [
     { id: "shared", companyId: "A", kind: "PRODUCT", code: "P", name: "Shared product" },
